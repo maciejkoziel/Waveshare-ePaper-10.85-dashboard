@@ -44,6 +44,11 @@ label_month = "MIESIĄC"
 label_year  = "ROK"
 
 # Calendar
+# Tasks
+tasks_title = "ZADANIA"
+tasks_empty = "Brak zadań"
+
+# Calendar
 calendar_title    = "NADCHODZĄCE"
 calendar_empty    = "Brak nadchodzących wydarzeń"
 calendar_today    = "dziś"

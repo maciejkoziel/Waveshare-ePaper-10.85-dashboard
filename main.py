@@ -51,6 +51,7 @@ try:
     ENABLE_BAMBU       = _w.get('enable_bambu', False)
     ENABLE_CALENDAR    = _w.get('enable_calendar', False)
     ENABLE_ANTIGRAVITY = _w.get('enable_antigravity', False)
+    ENABLE_TASKS       = _w.get('enable_tasks', False)
     ENABLE_CLAUDE      = _w.get('enable_claude', False)
     ENABLE_SPOTIFY     = _w.get('enable_spotify', False)
     _loc = _cfg.get('location', {})
@@ -67,6 +68,7 @@ except FileNotFoundError:
     ENABLE_BAMBU = False
     ENABLE_CALENDAR = False
     ENABLE_ANTIGRAVITY = False
+    ENABLE_TASKS = False
     ENABLE_CLAUDE = False
     ENABLE_SPOTIFY = False
     LOCATION_LAT = 49.6790190
@@ -108,6 +110,7 @@ GMAIL_TOKEN_PATH = os.path.join(BASE_DIR, 'token.json')
 GOOGLE_SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/tasks.readonly',
 ]
 
 if os.path.exists(LIB_DIR):
@@ -222,6 +225,7 @@ class DataStore:
         self.claude = {'error': False, 'five_hour': {}, 'seven_day': {}}
         self.antigravity = {'error': False, 'models': []}
         self.calendar_events = []
+        self.tasks_items = []
         self.sysload = {'cpu': 0, 'ram_free': 0, 'history': deque(maxlen=30)}
         self.crypto = {'btc': 0, 'eth': 0, 'btc_hist': [], 'eth_hist': []}
         self.ping = {'current': 0, 'history': deque(maxlen=50)}
@@ -229,7 +233,7 @@ class DataStore:
         self.last_update = {
             'weather': 0, 'strava': 0, 'printer': 0, 'gmail': 0,
             'spotify': 0, 'crypto': 0, 'sysload': 0, 'ping': 0,
-            'claude': 0, 'antigravity': 0, 'calendar': 0,
+            'claude': 0, 'antigravity': 0, 'calendar': 0, 'tasks': 0,
         }
         self.data_changed = threading.Event()
         self.last_fingerprint = None
@@ -653,6 +657,45 @@ def update_data_thread():
                 logging.error(f"Calendar error: {e}")
             data_store.last_update['calendar'] = now
 
+        if ENABLE_TASKS and now - data_store.last_update['tasks'] > 300:
+            try:
+                creds = None
+                if os.path.exists(GMAIL_TOKEN_PATH):
+                    creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GOOGLE_SCOPES)
+                    if creds and creds.expired and creds.refresh_token:
+                        creds.refresh(Request())
+                        with open(GMAIL_TOKEN_PATH, 'w') as t: t.write(creds.to_json())
+                if creds and creds.valid:
+                    tasks_service = build('tasks', 'v1', credentials=creds, cache_discovery=False)
+                    result = tasks_service.tasks().list(
+                        tasklist='@default', showCompleted=False,
+                        showHidden=False, maxResults=10
+                    ).execute()
+                    items = []
+                    for t in result.get('items', []):
+                        due = t.get('due', '')
+                        due_str = ''
+                        if due:
+                            try:
+                                due_date = datetime.strptime(due[:10], '%Y-%m-%d').date()
+                                today = datetime.now().date()
+                                delta = (due_date - today).days
+                                if delta == 0:
+                                    due_str = STRINGS.get('calendar_today', 'dziś')
+                                elif delta == 1:
+                                    due_str = STRINGS.get('calendar_tomorrow', 'jutro')
+                                elif delta > 1:
+                                    due_str = f"+{delta}"
+                                else:
+                                    due_str = f"{delta}d"
+                            except Exception:
+                                pass
+                        items.append({'title': t.get('title', '?'), 'due': due_str})
+                    with data_store.lock: data_store.tasks_items = items
+            except Exception as e:
+                logging.error(f"Tasks error: {e}")
+            data_store.last_update['tasks'] = now
+
         # Claude Data Fetching (Run external script every 10 min)
         if ENABLE_CLAUDE and now - data_store.last_update['claude'] > 600:
             try:
@@ -800,6 +843,7 @@ def render_screen(epd, fonts):
         printer = data_store.printer.copy()
         gmail_unread = data_store.gmail_unread
         calendar_events = list(data_store.calendar_events)
+        tasks_items = list(data_store.tasks_items)
         spotify = data_store.spotify.copy()
         claude = data_store.claude.copy()
         antigravity = data_store.antigravity.copy()
@@ -989,31 +1033,52 @@ def render_screen(epd, fonts):
     draw.line((col2_x, 320, col_w * 2 - 20, 320), fill="black", width=2)
 
     y3 = 340
-    if ENABLE_ANTIGRAVITY:
+    if ENABLE_TASKS:
+        draw.text((col2_x, y3), STRINGS.get('tasks_title', 'ZADANIA'), font=fonts['cal28'], fill="black")
+        row_h = 27
+        ty = y3 + 35
+        if tasks_items:
+            for task in tasks_items:
+                if ty + row_h > 470:
+                    break
+                due = task.get('due', '')
+                title = task['title']
+                if due:
+                    draw.text((col2_x + 2, ty), '·', font=fonts['20'], fill="black")
+                    draw.text((col2_x + 18, ty), due, font=fonts['cal20'], fill="black")
+                    max_chars = 28
+                    if len(title) > max_chars:
+                        title = title[:max_chars - 1] + '…'
+                    draw.text((col2_x + 68, ty), title, font=fonts['cal20'], fill="black")
+                else:
+                    draw.text((col2_x + 2, ty), '·', font=fonts['20'], fill="black")
+                    max_chars = 36
+                    if len(title) > max_chars:
+                        title = title[:max_chars - 1] + '…'
+                    draw.text((col2_x + 18, ty), title, font=fonts['cal20'], fill="black")
+                ty += row_h
+        else:
+            draw.text((col2_x, ty), STRINGS.get('tasks_empty', 'Brak zadań'), font=fonts['cal20'], fill="black")
+    elif ENABLE_ANTIGRAVITY:
         draw_icon(draw, col2_x, y3, "icon_cpu", (50, 50))
         draw.text((col2_x + 60, y3), STRINGS.get('antigravity_title', 'ANTIGRAVITY USAGE'), font=fonts['28'], fill="black")
-
         if antigravity.get('error'):
             draw.text((col2_x + 60, y3 + 35), STRINGS.get('error_loading_data', 'Error loading data'), font=fonts['20'], fill="black")
         else:
             models = antigravity.get('models', [])
             opus = next((m for m in models if m.get('modelId') == 'claude-opus-4-6-thinking'), None)
             gemini = next((m for m in models if m.get('modelId') == 'gemini-3-pro-high'), None)
-
             y_off = y3 + 35
             for m_data in (opus, gemini):
                 if m_data:
                     label = "Opus 4.6" if m_data.get('modelId') == 'claude-opus-4-6-thinking' else "Gemini 3Pro"
                     pct = m_data.get('usedPercentage', 0)
                     rem_time = time_until(m_data.get('resetDate'))
-
                     draw.text((col2_x + 60, y_off), STRINGS.get('antigravity_model', '{label} {pct}% | In {time}').format(label=label, pct=pct, time=rem_time), font=fonts['20'], fill="black")
-
                     bx, bw, bh = col2_x + 60, 330, 15
                     draw.rectangle((bx, y_off + 25, bx + bw, y_off + 25 + bh), outline="black", width=2)
                     fill_w = int((bw - 4) * min(pct / 100.0, 1.0))
                     if fill_w > 0: draw.rectangle((bx + 2, y_off + 27, bx + 2 + fill_w, y_off + 25 + bh - 2), fill="black")
-
                     y_off += 50
 
     draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)

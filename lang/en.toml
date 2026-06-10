@@ -44,6 +44,11 @@ label_month = "MONTH"
 label_year  = "YEAR"
 
 # Calendar
+# Tasks
+tasks_title = "TASKS"
+tasks_empty = "No tasks"
+
+# Calendar
 calendar_title    = "UPCOMING"
 calendar_empty    = "No upcoming events"
 calendar_today    = "today"

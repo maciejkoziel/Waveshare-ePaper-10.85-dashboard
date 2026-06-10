@@ -228,6 +228,21 @@ class EPD():
 
         self.TurnOnDisplay()
 
+    def PowerOff(self):
+        # Power off panel without releasing GPIO/SPI — avoids flicker on next wake.
+        self.CS_ALL(0)
+        self.SendCommand(0x02)  # POWER_OFF
+        self.SendData(0x00)
+        self.CS_ALL(1)
+        epdconfig.delay_ms(200)
+
+    def PowerOn(self):
+        # Power on panel (assumes module already initialized via Init).
+        self.CS_ALL(0)
+        self.SendCommand(0x04)  # POWER_ON
+        self.ReadBusyH()
+        self.CS_ALL(1)
+
     def sleep(self):
         self.CS_ALL(0)
         self.SendCommand(0x02) # POWER_OFF

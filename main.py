@@ -1176,7 +1176,7 @@ def main():
             t_robo.start()
 
         refresh_counter = 0
-        MIN_REFRESH_INTERVAL = 30
+        MIN_REFRESH_INTERVAL = 180
 
         while True:
             start_time = time.time()

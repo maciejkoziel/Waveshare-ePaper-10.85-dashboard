@@ -938,8 +938,8 @@ def render_screen(epd, fonts):
         row_h = 27
         # Fixed column positions: [sq] [day_label] [HH:MM] [title]
         x_day   = col2_x + 18   # day label ("dziś", "jutro", "+3")
-        x_time  = col2_x + 88   # HH:MM (fixed, blank for all-day)
-        x_title = col2_x + 148  # event title
+        x_time  = col2_x + 58   # HH:MM (fixed, blank for all-day)
+        x_title = col2_x + 108  # event title
         ey = y2 + 35
         if calendar_events:
             for ev in calendar_events:
@@ -963,8 +963,8 @@ def render_screen(epd, fonts):
                 if time_part:
                     draw.text((x_time, ey), time_part, font=fonts['cal20'], fill=text_color)
                 title = ev['title']
-                if len(title) > 22:
-                    title = title[:21] + '…'
+                if len(title) > 28:
+                    title = title[:27] + '…'
                 draw.text((x_title, ey), title, font=fonts['cal20'], fill=text_color)
                 if soon:
                     draw.text((x_day + 1, ey), day_label, font=fonts['cal20'], fill=text_color)

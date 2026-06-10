@@ -1128,16 +1128,16 @@ def main():
 
         fonts = {
             'cal_font_cache': {},
-            '20': load_font('AtkinsonHyperlegible-Regular.ttf', 20),
-            '24': load_font('AtkinsonHyperlegible-Regular.ttf', 24),
-            '28': load_font('AtkinsonHyperlegible-Regular.ttf', 28),
-            '32': load_font('AtkinsonHyperlegible-Regular.ttf', 32),
-            '35': load_font('AtkinsonHyperlegible-Regular.ttf', 35),
-            '40': load_font('AtkinsonHyperlegible-Regular.ttf', 40),
-            '60': load_font('AtkinsonHyperlegible-Regular.ttf', 60),
-            '80': load_font('AtkinsonHyperlegible-Regular.ttf', 80),
-            'cal20': load_font('AtkinsonHyperlegible-Regular.ttf', 20),
-            'cal28': load_font('AtkinsonHyperlegible-Bold.ttf', 28),
+            '20': load_font('EncodeSansCondensed-Regular.ttf', 20),
+            '24': load_font('EncodeSansCondensed-Regular.ttf', 24),
+            '28': load_font('EncodeSansCondensed-Regular.ttf', 28),
+            '32': load_font('EncodeSansCondensed-Regular.ttf', 32),
+            '35': load_font('EncodeSansCondensed-Regular.ttf', 35),
+            '40': load_font('EncodeSansCondensed-Regular.ttf', 40),
+            '60': load_font('EncodeSansCondensed-Regular.ttf', 60),
+            '80': load_font('EncodeSansCondensed-Regular.ttf', 80),
+            'cal20': load_font('EncodeSansCondensed-Regular.ttf', 20),
+            'cal28': load_font('EncodeSansCondensed-Bold.ttf', 28),
         }
 
         t_data = threading.Thread(target=update_data_thread)

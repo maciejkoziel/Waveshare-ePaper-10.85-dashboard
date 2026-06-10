@@ -854,7 +854,7 @@ def render_screen(epd, fonts):
 
     else:
         cal_max_w = col_w - col1_x - 20
-        cal_max_h = (150 - y1) // 2 - 4
+        cal_max_h = (165 - y1) // 2 - 4
         weekdays_full = STRINGS.get('weekdays_full', ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
         line1 = f"{dt.year} - {months[dt.month - 1]}"
         line2 = f"{dt.day} - {weekdays_full[dt.weekday()]}"
@@ -874,12 +874,12 @@ def render_screen(epd, fonts):
         bb1 = draw.textbbox((0, 0), line1, font=f1)
         h1 = bb1[3] - bb1[1]
         draw.text((col1_x, y1), line1, font=f1, fill="black")
-        draw.text((col1_x, y1 + h1 + 14), line2, font=f2, fill="black")
+        draw.text((col1_x, y1 + h1 + 18), line2, font=f2, fill="black")
 
-    draw.line((col1_x, 150, col_w - 20, 150), fill="black", width=2)
+    draw.line((col1_x, 165, col_w - 20, 165), fill="black", width=2)
 
     # Widget 2: Bambu
-    y2 = 170
+    y2 = 185
     if ENABLE_BAMBU:
         p_status = str(printer.get('status', 'OFFLINE')).upper()
         draw_icon(draw, col1_x, y2, "icon_3d", (60, 60))

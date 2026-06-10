@@ -921,9 +921,6 @@ def render_screen(epd, fonts):
         else:
             draw.text((uv_val_x, uv_val_y), uv_val_str, font=fonts['60'], fill="black")
 
-        draw.text((col1_x + 100, y_cal_div + 90), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
-        draw.text((col1_x + 100, y_cal_div + 115), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
-
         daily = weather.get('daily', {})
         d_times = daily.get('time', [])
         d_tmax = daily.get('temperature_2m_max', [])
@@ -935,21 +932,29 @@ def render_screen(epd, fonts):
         sr_time = d_sunrise[0][11:16] if d_sunrise else '--:--'
         ss_time = d_sunset[0][11:16] if d_sunset else '--:--'
         sr_ss_str = STRINGS.get('sunrise_sunset', '↑ {sr}   ↓ {ss}').format(sr=sr_time, ss=ss_time)
-        draw.text((col1_x + 100, y_cal_div + 138), sr_ss_str, font=fonts['20'], fill="black")
 
         moon_names = STRINGS.get('moon_phases', [''] * 8)
         moon_idx = moon_phase_index(datetime.now())
         moon_name = moon_names[moon_idx] if len(moon_names) >= 8 else ''
-        moon_y = y_cal_div + 160
-        draw_icon(draw, col1_x + 100, moon_y, f"icon_moon_phase_{moon_idx}", (20, 20))
-        draw.text((col1_x + 124, moon_y), moon_name, font=fonts['20'], fill="black")
 
-        draw.line((col1_x, 242, col_w - 20, 242), fill="black", width=2)
+        x_left = col1_x + 100
+        x_right = col1_x + 255
+
+        # Line 1: humidity (left)  |  sunrise/sunset (right)
+        draw.text((x_left, y_cal_div + 90), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
+        draw.text((x_right, y_cal_div + 90), sr_ss_str, font=fonts['20'], fill="black")
+
+        # Line 2: pressure (left)  |  moon phase icon + name (right)
+        draw.text((x_left, y_cal_div + 115), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
+        draw_icon(draw, x_right, y_cal_div + 113, f"icon_moon_phase_{moon_idx}", (20, 20))
+        draw.text((x_right + 24, y_cal_div + 115), moon_name, font=fonts['20'], fill="black")
+
+        draw.line((col1_x, 210, col_w - 20, 210), fill="black", width=2)
 
         n_days = min(FORECAST_DAYS, len(d_times))
         slot_w = (col_w - 40) // max(n_days, 1)
         icon_sz = min(50, slot_w - 10)
-        f_y = 252
+        f_y = 220
         for i in range(n_days):
             off_x = col1_x + (i * slot_w)
             try:

@@ -129,6 +129,7 @@ logger.addHandler(file_handler)
 
 icon_cache = {}
 global_printer = None
+refresh_event = threading.Event()
 
 
 class HardwareTimeoutError(Exception):
@@ -137,6 +138,10 @@ class HardwareTimeoutError(Exception):
 
 def timeout_handler(signum, frame):
     raise HardwareTimeoutError("Hardware Busy-Wait Timeout")
+
+
+def refresh_signal_handler(signum, frame):
+    refresh_event.set()
 
 
 # --- ROBUST NETWORK MANAGER ---
@@ -1156,6 +1161,7 @@ def main():
     roborock_user_data = auth_roborock(ROBOROCK_CONF['EMAIL'])
 
     signal.signal(signal.SIGALRM, timeout_handler)
+    signal.signal(signal.SIGUSR1, refresh_signal_handler)
     epd = None
 
     try:
@@ -1231,7 +1237,8 @@ def main():
 
             elapsed = time.time() - start_time
             sleep_time = max(0, 60 - elapsed)
-            time.sleep(sleep_time)
+            refresh_event.wait(timeout=sleep_time)
+            refresh_event.clear()
 
     except KeyboardInterrupt:
         try:

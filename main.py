@@ -612,24 +612,43 @@ def update_data_thread():
                 if creds and creds.valid:
                     cal_service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
                     now_iso = datetime.now(timezone.utc).isoformat()
-                    result = cal_service.events().list(
-                        calendarId='primary', timeMin=now_iso,
-                        maxResults=5, singleEvents=True, orderBy='startTime'
-                    ).execute()
-                    events = []
-                    for ev in result.get('items', []):
-                        start = ev['start'].get('dateTime', ev['start'].get('date', ''))
-                        try:
-                            if 'T' in start:
-                                dt_ev = datetime.fromisoformat(start)
-                                time_str = dt_ev.strftime('%d.%m %H:%M')
-                            else:
-                                dt_ev = datetime.strptime(start, '%Y-%m-%d')
-                                time_str = dt_ev.strftime('%d.%m')
-                        except Exception:
-                            time_str = start[:10]
-                        events.append({'title': ev.get('summary', '?'), 'time': time_str})
-                    with data_store.lock: data_store.calendar_events = events
+                    cal_list = cal_service.calendarList().list().execute()
+                    calendar_ids = {}
+                    for cal in cal_list.get('items', []):
+                        name = cal.get('summary', '')
+                        if cal.get('primary'):
+                            calendar_ids[cal['id']] = 'personal'
+                        elif 'rodzin' in name.lower():
+                            calendar_ids[cal['id']] = 'family'
+                    all_events = []
+                    for cal_id, cal_type in calendar_ids.items():
+                        result = cal_service.events().list(
+                            calendarId=cal_id, timeMin=now_iso,
+                            maxResults=10, singleEvents=True, orderBy='startTime'
+                        ).execute()
+                        for ev in result.get('items', []):
+                            start = ev['start'].get('dateTime', ev['start'].get('date', ''))
+                            is_allday = 'T' not in start
+                            try:
+                                if is_allday:
+                                    dt_ev = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                                    time_str = dt_ev.strftime('%d.%m')
+                                else:
+                                    dt_ev = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                                    time_str = dt_ev.astimezone().strftime('%d.%m %H:%M')
+                            except Exception:
+                                dt_ev = datetime.now(timezone.utc)
+                                time_str = start[:10]
+                                is_allday = True
+                            all_events.append({
+                                'title': ev.get('summary', '?'),
+                                'time': time_str,
+                                'calendar': cal_type,
+                                'dt': dt_ev,
+                                'allday': is_allday,
+                            })
+                    all_events.sort(key=lambda e: e['dt'])
+                    with data_store.lock: data_store.calendar_events = all_events[:8]
             except Exception as e:
                 logging.error(f"Calendar error: {e}")
             data_store.last_update['calendar'] = now
@@ -912,7 +931,34 @@ def render_screen(epd, fonts):
     else:
         y2 = y_cal_div + 15
 
-    if ENABLE_BAMBU:
+    if ENABLE_CALENDAR:
+        draw.text((col2_x, y2), STRINGS.get('calendar_title', 'NADCHODZĄCE'), font=fonts['28'], fill="black")
+        now_utc = datetime.now(timezone.utc)
+        row_h = 27
+        ey = y2 + 35
+        if calendar_events:
+            for ev in calendar_events:
+                if ey + row_h > 318:
+                    break
+                dt_ev = ev.get('dt')
+                soon = (not ev.get('allday', True) and dt_ev is not None and
+                        0 <= (dt_ev - now_utc).total_seconds() <= 10800)
+                text_color = "red" if soon else "black"
+                sq_color = "black" if ev['calendar'] == 'personal' else "yellow"
+                draw.rectangle([col2_x + 2, ey + 5, col2_x + 13, ey + 16], fill=sq_color, outline="black")
+                draw.text((col2_x + 18, ey), ev['time'], font=fonts['20'], fill=text_color)
+                if soon:
+                    draw.text((col2_x + 19, ey), ev['time'], font=fonts['20'], fill=text_color)
+                title = ev['title']
+                if len(title) > 26:
+                    title = title[:25] + '…'
+                draw.text((col2_x + 130, ey), title, font=fonts['20'], fill=text_color)
+                if soon:
+                    draw.text((col2_x + 131, ey), title, font=fonts['20'], fill=text_color)
+                ey += row_h
+        else:
+            draw.text((col2_x, ey), STRINGS.get('calendar_empty', 'Brak nadchodzących wydarzeń'), font=fonts['20'], fill="black")
+    elif ENABLE_BAMBU:
         p_status = str(printer.get('status', 'OFFLINE')).upper()
         draw_icon(draw, col2_x, y2, "icon_3d", (60, 60))
         draw.text((col2_x + 70, y2), STRINGS.get('printer_title', 'PRINTER: {status}').format(status=p_status), font=fonts['28'], fill="black")
@@ -927,19 +973,7 @@ def render_screen(epd, fonts):
     draw.line((col2_x, 320, col_w * 2 - 20, 320), fill="black", width=2)
 
     y3 = 340
-    if ENABLE_CALENDAR:
-        draw.text((col2_x, y3), STRINGS.get('calendar_title', 'UPCOMING'), font=fonts['28'], fill="black")
-        if calendar_events:
-            for i, ev in enumerate(calendar_events[:4]):
-                ey = y3 + 35 + i * 32
-                draw.text((col2_x, ey), ev['time'], font=fonts['20'], fill="red")
-                title = ev['title']
-                if len(title) > 28:
-                    title = title[:27] + '…'
-                draw.text((col2_x + 95, ey), title, font=fonts['20'], fill="black")
-        else:
-            draw.text((col2_x, y3 + 35), STRINGS.get('calendar_empty', 'No upcoming events'), font=fonts['20'], fill="black")
-    elif ENABLE_ANTIGRAVITY:
+    if ENABLE_ANTIGRAVITY:
         draw_icon(draw, col2_x, y3, "icon_cpu", (50, 50))
         draw.text((col2_x + 60, y3), STRINGS.get('antigravity_title', 'ANTIGRAVITY USAGE'), font=fonts['28'], fill="black")
 

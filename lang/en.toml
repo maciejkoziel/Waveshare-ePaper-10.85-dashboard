@@ -43,6 +43,10 @@ label_day   = "DAY"
 label_month = "MONTH"
 label_year  = "YEAR"
 
+# Calendar
+calendar_title = "UPCOMING"
+calendar_empty = "No upcoming events"
+
 # Gmail
 gmail_unread = "Unread Inbox: {count}"
 

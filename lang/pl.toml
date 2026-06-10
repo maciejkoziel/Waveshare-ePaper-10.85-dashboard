@@ -43,6 +43,10 @@ label_day   = "DZIEŃ"
 label_month = "MIESIĄC"
 label_year  = "ROK"
 
+# Calendar
+calendar_title = "NADCHODZĄCE"
+calendar_empty = "Brak nadchodzących wydarzeń"
+
 # Gmail
 gmail_unread = "Nieprzeczytane: {count}"
 

@@ -85,17 +85,14 @@ def digital_read(pin):
     return lgpio.gpio_read(_h, pin)
 
 def spi_writebyte(data):
-    if not _cs_m:
-        _spi_m.writebytes([data])
-    if not _cs_s:
-        _spi_s.writebytes([data])
+    # Both spidev0.0 and spidev0.1 share the same physical SPI bus (MOSI/CLK).
+    # CS selection is handled exclusively by pinctrl, not by which fd we write to.
+    # Writing to both fds would send each byte twice — always use _spi_m only.
+    _spi_m.writebytes([data])
 
 def spi_writebyte2(buf, length):
     data = list(buf) if not isinstance(buf, (list, bytes, bytearray)) else buf
-    if not _cs_m:
-        _spi_m.writebytes2(data)
-    if not _cs_s:
-        _spi_s.writebytes2(data)
+    _spi_m.writebytes2(data)
 
 def delay_ms(ms):
     time.sleep(ms / 1000.0)

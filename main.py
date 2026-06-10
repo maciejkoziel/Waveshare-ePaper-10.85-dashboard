@@ -938,8 +938,8 @@ def render_screen(epd, fonts):
         row_h = 27
         # Fixed column positions: [sq] [day_label] [HH:MM] [title]
         x_day   = col2_x + 18   # day label ("dziś", "jutro", "+3")
-        x_time  = col2_x + 58   # HH:MM (fixed, blank for all-day)
-        x_title = col2_x + 108  # event title
+        x_time  = col2_x + 68   # HH:MM (fixed, blank for all-day)
+        x_title = col2_x + 118  # event title
         ey = y2 + 35
         if calendar_events:
             for ev in calendar_events:

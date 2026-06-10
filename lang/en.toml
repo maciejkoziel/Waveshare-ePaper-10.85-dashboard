@@ -30,6 +30,7 @@ air_quality_title = "AIR QUALITY"
 aqi_label         = "AQI:"
 humidity          = "Humidity: {hum}%"
 pressure          = "Press: {pres} hPa"
+sunrise_sunset    = "↑ {sr}   ↓ {ss}"
 moon_phases       = ["New Moon", "Wax. Crescent", "1st Quarter", "Wax. Gibbous", "Full Moon", "Wan. Gibbous", "3rd Quarter", "Wan. Crescent"]
 
 # Claude

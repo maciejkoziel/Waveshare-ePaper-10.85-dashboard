@@ -30,6 +30,7 @@ air_quality_title = "JAKOŚĆ POWIETRZA"
 aqi_label         = "AQI:"
 humidity          = "Wilgotność: {hum}%"
 pressure          = "Ciśnienie: {pres} hPa"
+sunrise_sunset    = "↑ {sr}   ↓ {ss}"
 moon_phases       = ["Nów", "Rośnący Sierp", "I Kwadra", "Rośnąca Tarcza", "Pełnia", "Malejąca Tarcza", "III Kwadra", "Malejący Sierp"]
 
 # Claude

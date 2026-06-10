@@ -934,18 +934,15 @@ def render_screen(epd, fonts):
         d_sunset = daily.get('sunset', [])
         sr_time = d_sunrise[0][11:16] if d_sunrise else '--:--'
         ss_time = d_sunset[0][11:16] if d_sunset else '--:--'
-
-        sun_y = y_cal_div + 138
-        draw_icon(draw, col1_x, sun_y, "icon_sun", (20, 20))
-        draw.text((col1_x + 24, sun_y), sr_time, font=fonts['20'], fill="black")
-        draw_icon(draw, col1_x + 80, sun_y, "icon_moon", (20, 20))
-        draw.text((col1_x + 104, sun_y), ss_time, font=fonts['20'], fill="black")
+        sr_ss_str = STRINGS.get('sunrise_sunset', '↑ {sr}   ↓ {ss}').format(sr=sr_time, ss=ss_time)
+        draw.text((col1_x + 100, y_cal_div + 138), sr_ss_str, font=fonts['20'], fill="black")
 
         moon_names = STRINGS.get('moon_phases', [''] * 8)
-        moon_name = moon_names[moon_phase_index(datetime.now())] if len(moon_names) >= 8 else ''
+        moon_idx = moon_phase_index(datetime.now())
+        moon_name = moon_names[moon_idx] if len(moon_names) >= 8 else ''
         moon_y = y_cal_div + 160
-        draw_icon(draw, col1_x, moon_y, "icon_night", (20, 20))
-        draw.text((col1_x + 24, moon_y), moon_name, font=fonts['20'], fill="black")
+        draw_icon(draw, col1_x + 100, moon_y, f"icon_moon_phase_{moon_idx}", (20, 20))
+        draw.text((col1_x + 124, moon_y), moon_name, font=fonts['20'], fill="black")
 
         draw.line((col1_x, 242, col_w - 20, 242), fill="black", width=2)
 

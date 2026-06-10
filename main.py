@@ -846,7 +846,7 @@ def render_screen(epd, fonts):
     f_cal = fit_cal_font(cal_line)
     bb_cal = draw.textbbox((0, 0), cal_line, font=f_cal)
     cal_text_h = bb_cal[3] - bb_cal[1]
-    cal_text_y = 10 + (y_cal_div - 10 - cal_text_h) // 2
+    cal_text_y = max(0, 10 + (y_cal_div - 10 - cal_text_h) // 2 - 25)
     draw.text((col1_x, cal_text_y), cal_line, font=f_cal, fill="black")
 
     draw.line((col1_x, y_cal_div, col_w * 2 - 20, y_cal_div), fill="black", width=2)

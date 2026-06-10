@@ -41,7 +41,7 @@ SPI is enabled in `/boot/firmware/config.txt` (`dtparam=spi=on`). I2C is disable
 | Dot pitch | 0.191 × 0.191 mm |
 | Display size | 259.76 × 91.68 mm |
 | Full refresh time | **21 seconds** |
-| Fast refresh time | 12 seconds |
+| Fast refresh time | **21 seconds** (same as full — no fast mode on G panel) |
 | Partial refresh | **Not supported** |
 | Recommended refresh interval | ≥ 180 seconds |
 | Operating voltage | 3.3V (raw) / 3.3V–5V (with HAT) |
@@ -189,6 +189,22 @@ ssh maciej@192.168.12.175 'tail -f ~/Waveshare-ePaper-10.85-dashboard/dashboard.
 # Attach to running session
 ssh maciej@192.168.12.175 'tmux attach -t dashboard'
 ```
+
+## On-Demand Refresh
+
+The dashboard refreshes every 60 seconds, but you can trigger an immediate refresh at any time via SIGUSR1.
+
+**After every change to the dashboard, always trigger a manual refresh to verify the result on screen:**
+
+```bash
+# Trigger immediate refresh from Mac
+ssh maciej@192.168.12.175 'kill -USR1 $(pgrep -f main.py)'
+
+# Or directly on the Pi
+kill -USR1 $(pgrep -f main.py)
+```
+
+This skips the remaining wait in the current 60s cycle and renders immediately. The display still takes ~21s to physically refresh (inherent to e-paper hardware).
 
 ## Project Structure
 

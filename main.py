@@ -1162,6 +1162,7 @@ def main():
         epd = epd10in85g.EPD()
         epd.Init()
         epd.Clear()
+        epd.sleep()
 
         def load_font(name, size):
             return ImageFont.truetype(os.path.join(FONT_DIR, name), size)

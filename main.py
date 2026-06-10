@@ -855,19 +855,20 @@ def render_screen(epd, fonts):
     else:
         cal_max_w = col_w - col1_x - 20
         cal_max_h = (150 - y1) // 2 - 4
+        weekdays_full = STRINGS.get('weekdays_full', ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
         line1 = f"{dt.year} - {months[dt.month - 1]}"
-        line2 = f"{months[dt.month - 1]} {dt.day} - {calendar.day_name[dt.weekday()]}"
+        line2 = f"{dt.day} - {weekdays_full[dt.weekday()]}"
         def fit_cal_font(text):
             size = cal_max_h
             while size > 8:
-                f = fonts['bilbo_cache'].get(size) or ImageFont.truetype(
-                    os.path.join(FONT_DIR, 'BilboSwashCaps-Regular.ttf'), size)
-                fonts['bilbo_cache'][size] = f
+                f = fonts['cal_font_cache'].get(size) or ImageFont.truetype(
+                    os.path.join(FONT_DIR, 'Oregano-Regular.ttf'), size)
+                fonts['cal_font_cache'][size] = f
                 bb = draw.textbbox((0, 0), text, font=f)
                 if (bb[2] - bb[0]) <= cal_max_w and (bb[3] - bb[1]) <= cal_max_h:
                     return f
                 size -= 1
-            return fonts['bilbo_cache'][8]
+            return fonts['cal_font_cache'][8]
         f1 = fit_cal_font(line1)
         f2 = fit_cal_font(line2)
         bb1 = draw.textbbox((0, 0), line1, font=f1)
@@ -1175,7 +1176,7 @@ def main():
             return ImageFont.truetype(os.path.join(FONT_DIR, name), size)
 
         fonts = {
-            'bilbo_cache': {},
+            'cal_font_cache': {},
             '20': load_font('Aldrich-Regular.ttc', 20),
             '24': load_font('Aldrich-Regular.ttc', 24),
             '28': load_font('Aldrich-Regular.ttc', 28),

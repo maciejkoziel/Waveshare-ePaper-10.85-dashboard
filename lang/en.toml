@@ -54,4 +54,5 @@ time_hours_minutes = "{hours}h {minutes}m"
 
 # Date/time formatting
 months   = ["January","February","March","April","May","June","July","August","September","October","November","December"]
-weekdays = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+weekdays      = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+weekdays_full = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]

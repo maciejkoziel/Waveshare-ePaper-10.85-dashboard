@@ -56,4 +56,5 @@ time_hours_minutes = "{hours}g {minutes}m"
 
 # Date/time formatting
 months   = ["Styczen","Luty","Marzec","Kwiecien","Maj","Czerwiec","Lipiec","Sierpien","Wrzesien","Pazdziernik","Listopad","Grudzien"]
-weekdays = ["Pon","Wt","Sr","Czw","Pt","Sob","Nd"]
+weekdays      = ["Pon","Wt","Sr","Czw","Pt","Sob","Nd"]
+weekdays_full = ["Poniedzialek","Wtorek","Sroda","Czwartek","Piatek","Sobota","Niedziela"]

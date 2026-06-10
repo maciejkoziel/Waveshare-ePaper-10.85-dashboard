@@ -973,7 +973,7 @@ def render_screen(epd, fonts):
         draw.line((col2_x, 165, col_w * 2 - 20, 165), fill="black", width=2)
         y2 = 185
     else:
-        y2 = y_cal_div + 15
+        y2 = y_cal_div + 8
 
     if ENABLE_CALENDAR:
         draw.text((col2_x, y2), STRINGS.get('calendar_title', 'NADCHODZĄCE'), font=fonts['cal28'], fill="black")
@@ -1032,7 +1032,7 @@ def render_screen(epd, fonts):
 
     draw.line((col2_x, 320, col_w * 2 - 20, 320), fill="black", width=2)
 
-    y3 = 340
+    y3 = 330
     if ENABLE_TASKS:
         draw.text((col2_x, y3), STRINGS.get('tasks_title', 'ZADANIA'), font=fonts['cal28'], fill="black")
         row_h = 27
@@ -1046,13 +1046,13 @@ def render_screen(epd, fonts):
                 if due:
                     draw.text((col2_x + 2, ty), '·', font=fonts['20'], fill="black")
                     draw.text((col2_x + 18, ty), due, font=fonts['cal20'], fill="black")
-                    max_chars = 28
+                    max_chars = 45
                     if len(title) > max_chars:
                         title = title[:max_chars - 1] + '…'
                     draw.text((col2_x + 68, ty), title, font=fonts['cal20'], fill="black")
                 else:
                     draw.text((col2_x + 2, ty), '·', font=fonts['20'], fill="black")
-                    max_chars = 36
+                    max_chars = 52
                     if len(title) > max_chars:
                         title = title[:max_chars - 1] + '…'
                     draw.text((col2_x + 18, ty), title, font=fonts['cal20'], fill="black")

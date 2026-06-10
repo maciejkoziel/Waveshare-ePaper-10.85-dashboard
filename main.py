@@ -95,7 +95,6 @@ except FileNotFoundError:
 # --- API ENDPOINTS ---
 API_ENDPOINTS = {
     'weather': 'https://api.open-meteo.com/v1/forecast',
-    'aqi': 'https://air-quality-api.open-meteo.com/v1/air-quality',
     'strava_token': 'https://www.strava.com/oauth/token',
     'strava_auth': 'https://www.strava.com/oauth/authorize',
     'strava_activities': 'https://www.strava.com/api/v3/athlete/activities',
@@ -254,7 +253,6 @@ def get_data_fingerprint(ds):
         return (
             ds.weather.get('current', {}).get('temperature_2m'),
             ds.weather.get('current', {}).get('weather_code'),
-            ds.aqi,
             ds.gmail_unread,
             ds.printer.get('status'),
             ds.roborock.get('status'),
@@ -596,12 +594,9 @@ def update_data_thread():
 
         if now - data_store.last_update['weather'] > 600:
             weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days={FORECAST_DAYS}"
-            aqi_url = f"{API_ENDPOINTS['aqi']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=european_aqi&timezone=auto"
             w_data = net.get_json(weather_url)
-            a_data = net.get_json(aqi_url)
             with data_store.lock:
                 if w_data: data_store.weather = w_data
-                if a_data and 'current' in a_data: data_store.aqi = a_data['current'].get('european_aqi', 0)
             data_store.last_update['weather'] = now
 
         if ENABLE_STRAVA:
@@ -808,7 +803,6 @@ def render_screen(epd, fonts):
     if not data_store.lock.acquire(timeout=2.0): return Himage
     try:
         weather = data_store.weather.copy()
-        aqi = data_store.aqi
         strava = data_store.strava.copy()
         printer = data_store.printer.copy()
         rob = data_store.roborock.copy()
@@ -836,7 +830,7 @@ def render_screen(epd, fonts):
         size = cal_max_h
         while size > 8:
             f = fonts['cal_font_cache'].get(size) or ImageFont.truetype(
-                os.path.join(FONT_DIR, 'AntonSC-Regular.ttf'), size)
+                os.path.join(FONT_DIR, 'Doto-Regular.ttf'), size)
             fonts['cal_font_cache'][size] = f
             bb = draw.textbbox((0, 0), text, font=f)
             if (bb[2] - bb[0]) <= cal_max_w and (bb[3] - bb[1]) <= cal_max_h:
@@ -846,105 +840,12 @@ def render_screen(epd, fonts):
     f_cal = fit_cal_font(cal_line)
     bb_cal = draw.textbbox((0, 0), cal_line, font=f_cal)
     cal_text_h = bb_cal[3] - bb_cal[1]
-    cal_text_y = max(0, 10 + (y_cal_div - 10 - cal_text_h) // 2 - 25)
+    cal_text_y = 10 + (y_cal_div - 10 - cal_text_h) // 2 - 75
     draw.text((col1_x, cal_text_y), cal_line, font=f_cal, fill="black")
 
     draw.line((col1_x, y_cal_div, col_w * 2 - 20, y_cal_div), fill="black", width=2)
 
-    # --- COLUMN 1 (Widgets) ---
-
-    # Widget 1: Strava (if enabled, below calendar)
-    if ENABLE_STRAVA:
-        y1 = y_cal_div + 15
-        draw_icon(draw, col1_x, y1, "icon_strava", (60, 60))
-        draw.text((col1_x + 70, y1), STRINGS.get('strava_title', 'STRAVA STATS'), font=fonts['28'], fill="black")
-
-        draw.text((col1_x + 70, y1 + 35),
-                  STRINGS.get('strava_year_stats', '{year}: {dist} km | {prev_year}: {prev_dist} km').format(
-                      year=dt.year, dist=strava.get('distance_curr', 0),
-                      prev_year=dt.year - 1, prev_dist=strava.get('distance_prev', 0)),
-                  font=fonts['20'], fill="black")
-        draw.text((col1_x + 70, y1 + 60),
-                  STRINGS.get('strava_total', 'Total: {dist} km | {rides} acts').format(
-                      dist=strava.get('total_distance', 0), rides=strava.get('rides', 0)),
-                  font=fonts['20'], fill="black")
-
-        draw_icon(draw, col1_x + 70, y1 + 85, "icon_bike", (30, 30))
-        draw.text((col1_x + 105, y1 + 90), f"{strava.get('bike_total', 0)} km", font=fonts['20'], fill="black")
-
-        draw_icon(draw, col1_x + 220, y1 + 85, "icon_hike", (30, 30))
-        draw.text((col1_x + 255, y1 + 90), f"{strava.get('hike_total', 0)} km", font=fonts['20'], fill="black")
-
-        draw.line((col1_x, 165, col_w - 20, 165), fill="black", width=2)
-        y2 = 185
-    else:
-        y2 = y_cal_div + 15
-
-    # Widget 2: Bambu
-    if ENABLE_BAMBU:
-        p_status = str(printer.get('status', 'OFFLINE')).upper()
-        draw_icon(draw, col1_x, y2, "icon_3d", (60, 60))
-        draw.text((col1_x + 70, y2), STRINGS.get('printer_title', 'PRINTER: {status}').format(status=p_status), font=fonts['28'], fill="black")
-        if p_status not in ["OFFLINE", "UNKNOWN", "FINISH"]:
-            percent = printer.get('percentage', 0)
-            draw.rectangle((col1_x + 70, y2 + 40, col1_x + 400, y2 + 60), outline="black")
-            draw.rectangle((col1_x + 70, y2 + 40, col1_x + 70 + int(330 * (percent / 100)), y2 + 60), fill="black")
-            draw.text((col1_x + 70, y2 + 70),
-                      f"{percent}% | Rem: {printer.get('remaining_time', '0')}m | {printer.get('layers', '0/0')} L",
-                      font=fonts['20'], fill="black")
-
-    draw.line((col1_x, 320, col_w - 20, 320), fill="black", width=2)
-
-    # Widget 3: Roborock or Ping
-    y3 = 340
-    if ENABLE_ROBOROCK:
-        draw_icon(draw, col1_x, y3, "icon_roborock", (50, 50))
-        draw.text((col1_x + 60, y3), STRINGS.get('roborock_battery', 'Bat: {bat}% | {status}').format(bat=rob['battery'], status=rob['status']), font=fonts['28'], fill="black")
-        if rob['is_cleaning']:
-            draw.text((col1_x + 60, y3 + 35),
-                      STRINGS.get('roborock_cleaning', 'Clean: {area} m2 ({pct}%)').format(
-                          area=f"{rob['current_area']:.1f}", pct=f"{rob['pct']:.0f}"),
-                      font=fonts['24'], fill="black")
-            clamped_pct = min(rob['pct'], 100)
-            draw.rectangle((col1_x + 60, y3 + 70, col1_x + 390, y3 + 90), outline="black")
-            draw.rectangle((col1_x + 60, y3 + 70, col1_x + 60 + int(330 * (clamped_pct / 100)), y3 + 90), fill="black")
-        else:
-            draw.text((col1_x + 60, y3 + 35),
-                      STRINGS.get('roborock_last', 'Last: {date} | {area} m2').format(
-                          date=rob['last_date'], area=f"{rob['ref_area']:.1f}"),
-                      font=fonts['24'], fill="black")
-    elif ENABLE_ANTIGRAVITY:
-        draw_icon(draw, col1_x, y3, "icon_cpu", (50, 50))
-        draw.text((col1_x + 60, y3), STRINGS.get('antigravity_title', 'ANTIGRAVITY USAGE'), font=fonts['28'], fill="black")
-
-        if antigravity.get('error'):
-            draw.text((col1_x + 60, y3 + 35), STRINGS.get('error_loading_data', 'Error loading data'), font=fonts['20'], fill="black")
-        else:
-            models = antigravity.get('models', [])
-            opus = next((m for m in models if m.get('modelId') == 'claude-opus-4-6-thinking'), None)
-            gemini = next((m for m in models if m.get('modelId') == 'gemini-3-pro-high'), None)
-            
-            y_off = y3 + 35
-            for m_data in (opus, gemini):
-                if m_data:
-                    label = "Opus 4.6" if m_data.get('modelId') == 'claude-opus-4-6-thinking' else "Gemini 3Pro"
-                    pct = m_data.get('usedPercentage', 0)
-                    rem_time = time_until(m_data.get('resetDate'))
-                    
-                    draw.text((col1_x + 60, y_off), STRINGS.get('antigravity_model', '{label} {pct}% | In {time}').format(label=label, pct=pct, time=rem_time), font=fonts['20'], fill="black")
-                    
-                    bx, bw, bh = col1_x + 60, 330, 15
-                    draw.rectangle((bx, y_off + 25, bx + bw, y_off + 25 + bh), outline="black", width=2)
-                    fill_w = int((bw - 4) * min(pct / 100.0, 1.0))
-                    if fill_w > 0: draw.rectangle((bx + 2, y_off + 27, bx + 2 + fill_w, y_off + 25 + bh - 2), fill="black")
-                    
-                    y_off += 50
-    draw.line((col_w, y_cal_div, col_w, 470), fill="black", width=2)
-
-    # --- COLUMN 2 (Weather) ---
-    col2_x = col_w + 20
-    C2 = 45  # vertical offset applied to all col2 content
-
+    # --- COLUMN 1 (Weather) ---
     if 'current' in weather:
         cur = weather['current']
         temp = cur.get('temperature_2m', 0)
@@ -958,10 +859,10 @@ def render_screen(epd, fonts):
 
         temp_rounded = math.floor(temp + 0.5)
 
-        draw_icon(draw, col2_x, 20 + C2, get_weather_icon(w_code, is_day), (90, 90))
-        draw.text((col2_x + 100, 10 + C2), f"{temp_rounded}°C", font=fonts['80'], fill="black")
+        draw_icon(draw, col1_x, y_cal_div, get_weather_icon(w_code, is_day), (90, 90))
+        draw.text((col1_x + 100, y_cal_div), f"{temp_rounded}°C", font=fonts['80'], fill="black")
 
-        uv_x, uv_y = col2_x + 320, 25 + C2
+        uv_x, uv_y = col1_x + 310, y_cal_div + 5
         uv_rounded = math.floor(uv_index + 0.5)
         draw.text((uv_x, uv_y), "UV", font=fonts['28'], fill="black")
         uv_val_str = str(uv_rounded)
@@ -971,7 +872,7 @@ def render_screen(epd, fonts):
         except AttributeError:
             tw, th = draw.textsize(uv_val_str, font=fonts['60'])
 
-        uv_val_x, uv_val_y = uv_x + 45, 5 + C2
+        uv_val_x, uv_val_y = uv_x + 45, y_cal_div
         if uv_rounded >= 6:
             pad = 5
             draw.rectangle((uv_val_x - pad, uv_val_y - pad + 10, uv_val_x + tw + pad, uv_val_y + th + pad), fill="black")
@@ -979,15 +880,16 @@ def render_screen(epd, fonts):
         else:
             draw.text((uv_val_x, uv_val_y), uv_val_str, font=fonts['60'], fill="black")
 
-        draw.text((col2_x + 100, 95 + C2), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
-        draw.text((col2_x + 100, 120 + C2), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
+        draw.text((col1_x + 100, y_cal_div + 90), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
+        draw.text((col1_x + 100, y_cal_div + 115), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
 
-        draw.line((col2_x, 140 + C2, col2_x + col_w - 40, 140 + C2), fill="black", width=2)
+        draw.line((col1_x, 210, col_w - 20, 210), fill="black", width=2)
 
-        y_c2 = 160 + C2
-        draw_icon(draw, col2_x + 5, y_c2, "icon_wind", (30, 30))
+        y_w2 = 220
+        draw_icon(draw, col1_x + 5, y_w2, "icon_wind", (30, 30))
 
-        cx, cy, r = col2_x + 80, y_c2 + 80, 60
+        cx = col1_x + (col_w - 2 * col1_x) // 2
+        cy, r = y_w2 + 70, 55
         draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline="black", width=2)
 
         for angle in range(0, 360, 45):
@@ -1019,30 +921,9 @@ def render_screen(epd, fonts):
             tw = bbox[2] - bbox[0]
         except AttributeError:
             tw = draw.textsize(spd_text, font=fonts['20'])[0]
-
         draw.text((cx - tw / 2, cy + 25), spd_text, font=fonts['20'], fill="black")
 
-        aqi_x = col2_x + 180
-        draw.text((aqi_x, y_c2 + 10), STRINGS.get('air_quality_title', 'AIR QUALITY'), font=fonts['20'], fill="black")
-        draw.text((aqi_x, y_c2 + 55), STRINGS.get('aqi_label', 'AQI:'), font=fonts['28'], fill="black")
-
-        aqi_str = str(aqi)
-        try:
-            bbox = draw.textbbox((0, 0), aqi_str, font=fonts['80'])
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        except AttributeError:
-            tw, th = draw.textsize(aqi_str, font=fonts['80'])
-
-        val_x, val_y = aqi_x + 80, y_c2 + 66
-
-        if aqi >= 50:
-            pad = 20
-            draw.rectangle((val_x - pad, val_y - pad + 15, val_x + tw + pad, val_y + th + pad - 5), fill="black")
-            draw.text((val_x, val_y), aqi_str, font=fonts['80'], fill="white")
-        else:
-            draw.text((val_x, val_y), aqi_str, font=fonts['80'], fill="black")
-
-        draw.line((col2_x, 320 + C2, col2_x + col_w - 40, 320 + C2), fill="black", width=2)
+        draw.line((col1_x, 370, col_w - 20, 370), fill="black", width=2)
 
         daily = weather.get('daily', {})
         d_times = daily.get('time', [])
@@ -1053,9 +934,9 @@ def render_screen(epd, fonts):
         n_days = min(FORECAST_DAYS, len(d_times))
         slot_w = (col_w - 40) // max(n_days, 1)
         icon_sz = min(50, slot_w - 10)
-        f_y = 330 + C2
+        f_y = 375
         for i in range(n_days):
-            off_x = col2_x + (i * slot_w)
+            off_x = col1_x + (i * slot_w)
             try:
                 day_dt = datetime.strptime(d_times[i], "%Y-%m-%d")
                 day_label = weekdays_list[day_dt.weekday()]
@@ -1067,6 +948,95 @@ def render_screen(epd, fonts):
             tmin = math.floor(d_tmin[i] + 0.5) if i < len(d_tmin) else 0
             draw.text((off_x + 4, f_y + 24 + icon_sz + 2), f"{tmax}°", font=fonts['20'], fill="black")
             draw.text((off_x + 4, f_y + 24 + icon_sz + 20), f"{tmin}°", font=fonts['20'], fill="black")
+
+    draw.line((col_w, y_cal_div, col_w, 470), fill="black", width=2)
+
+    # --- COLUMN 2 (Widgets) ---
+    col2_x = col_w + 20
+
+    if ENABLE_STRAVA:
+        y1 = y_cal_div + 15
+        draw_icon(draw, col2_x, y1, "icon_strava", (60, 60))
+        draw.text((col2_x + 70, y1), STRINGS.get('strava_title', 'STRAVA STATS'), font=fonts['28'], fill="black")
+
+        draw.text((col2_x + 70, y1 + 35),
+                  STRINGS.get('strava_year_stats', '{year}: {dist} km | {prev_year}: {prev_dist} km').format(
+                      year=dt.year, dist=strava.get('distance_curr', 0),
+                      prev_year=dt.year - 1, prev_dist=strava.get('distance_prev', 0)),
+                  font=fonts['20'], fill="black")
+        draw.text((col2_x + 70, y1 + 60),
+                  STRINGS.get('strava_total', 'Total: {dist} km | {rides} acts').format(
+                      dist=strava.get('total_distance', 0), rides=strava.get('rides', 0)),
+                  font=fonts['20'], fill="black")
+
+        draw_icon(draw, col2_x + 70, y1 + 85, "icon_bike", (30, 30))
+        draw.text((col2_x + 105, y1 + 90), f"{strava.get('bike_total', 0)} km", font=fonts['20'], fill="black")
+
+        draw_icon(draw, col2_x + 220, y1 + 85, "icon_hike", (30, 30))
+        draw.text((col2_x + 255, y1 + 90), f"{strava.get('hike_total', 0)} km", font=fonts['20'], fill="black")
+
+        draw.line((col2_x, 165, col_w * 2 - 20, 165), fill="black", width=2)
+        y2 = 185
+    else:
+        y2 = y_cal_div + 15
+
+    if ENABLE_BAMBU:
+        p_status = str(printer.get('status', 'OFFLINE')).upper()
+        draw_icon(draw, col2_x, y2, "icon_3d", (60, 60))
+        draw.text((col2_x + 70, y2), STRINGS.get('printer_title', 'PRINTER: {status}').format(status=p_status), font=fonts['28'], fill="black")
+        if p_status not in ["OFFLINE", "UNKNOWN", "FINISH"]:
+            percent = printer.get('percentage', 0)
+            draw.rectangle((col2_x + 70, y2 + 40, col2_x + 400, y2 + 60), outline="black")
+            draw.rectangle((col2_x + 70, y2 + 40, col2_x + 70 + int(330 * (percent / 100)), y2 + 60), fill="black")
+            draw.text((col2_x + 70, y2 + 70),
+                      f"{percent}% | Rem: {printer.get('remaining_time', '0')}m | {printer.get('layers', '0/0')} L",
+                      font=fonts['20'], fill="black")
+
+    draw.line((col2_x, 320, col_w * 2 - 20, 320), fill="black", width=2)
+
+    y3 = 340
+    if ENABLE_ROBOROCK:
+        draw_icon(draw, col2_x, y3, "icon_roborock", (50, 50))
+        draw.text((col2_x + 60, y3), STRINGS.get('roborock_battery', 'Bat: {bat}% | {status}').format(bat=rob['battery'], status=rob['status']), font=fonts['28'], fill="black")
+        if rob['is_cleaning']:
+            draw.text((col2_x + 60, y3 + 35),
+                      STRINGS.get('roborock_cleaning', 'Clean: {area} m2 ({pct}%)').format(
+                          area=f"{rob['current_area']:.1f}", pct=f"{rob['pct']:.0f}"),
+                      font=fonts['24'], fill="black")
+            clamped_pct = min(rob['pct'], 100)
+            draw.rectangle((col2_x + 60, y3 + 70, col2_x + 390, y3 + 90), outline="black")
+            draw.rectangle((col2_x + 60, y3 + 70, col2_x + 60 + int(330 * (clamped_pct / 100)), y3 + 90), fill="black")
+        else:
+            draw.text((col2_x + 60, y3 + 35),
+                      STRINGS.get('roborock_last', 'Last: {date} | {area} m2').format(
+                          date=rob['last_date'], area=f"{rob['ref_area']:.1f}"),
+                      font=fonts['24'], fill="black")
+    elif ENABLE_ANTIGRAVITY:
+        draw_icon(draw, col2_x, y3, "icon_cpu", (50, 50))
+        draw.text((col2_x + 60, y3), STRINGS.get('antigravity_title', 'ANTIGRAVITY USAGE'), font=fonts['28'], fill="black")
+
+        if antigravity.get('error'):
+            draw.text((col2_x + 60, y3 + 35), STRINGS.get('error_loading_data', 'Error loading data'), font=fonts['20'], fill="black")
+        else:
+            models = antigravity.get('models', [])
+            opus = next((m for m in models if m.get('modelId') == 'claude-opus-4-6-thinking'), None)
+            gemini = next((m for m in models if m.get('modelId') == 'gemini-3-pro-high'), None)
+
+            y_off = y3 + 35
+            for m_data in (opus, gemini):
+                if m_data:
+                    label = "Opus 4.6" if m_data.get('modelId') == 'claude-opus-4-6-thinking' else "Gemini 3Pro"
+                    pct = m_data.get('usedPercentage', 0)
+                    rem_time = time_until(m_data.get('resetDate'))
+
+                    draw.text((col2_x + 60, y_off), STRINGS.get('antigravity_model', '{label} {pct}% | In {time}').format(label=label, pct=pct, time=rem_time), font=fonts['20'], fill="black")
+
+                    bx, bw, bh = col2_x + 60, 330, 15
+                    draw.rectangle((bx, y_off + 25, bx + bw, y_off + 25 + bh), outline="black", width=2)
+                    fill_w = int((bw - 4) * min(pct / 100.0, 1.0))
+                    if fill_w > 0: draw.rectangle((bx + 2, y_off + 27, bx + 2 + fill_w, y_off + 25 + bh - 2), fill="black")
+
+                    y_off += 50
 
     draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)
 
@@ -1180,14 +1150,14 @@ def main():
 
         fonts = {
             'cal_font_cache': {},
-            '20': load_font('Aldrich-Regular.ttc', 20),
-            '24': load_font('Aldrich-Regular.ttc', 24),
-            '28': load_font('Aldrich-Regular.ttc', 28),
-            '32': load_font('Aldrich-Regular.ttc', 32),
-            '35': load_font('Aldrich-Regular.ttc', 35),
-            '40': load_font('Aldrich-Regular.ttc', 40),
-            '60': load_font('Aldrich-Regular.ttc', 60),
-            '80': load_font('Aldrich-Regular.ttc', 80),
+            '20': load_font('ElmsSans-Regular.ttf',20),
+            '24': load_font('ElmsSans-Regular.ttf',24),
+            '28': load_font('ElmsSans-Regular.ttf',28),
+            '32': load_font('ElmsSans-Regular.ttf',32),
+            '35': load_font('ElmsSans-Regular.ttf',35),
+            '40': load_font('ElmsSans-Regular.ttf',40),
+            '60': load_font('ElmsSans-Regular.ttf',60),
+            '80': load_font('ElmsSans-Regular.ttf',80),
         }
 
         t_data = threading.Thread(target=update_data_thread)

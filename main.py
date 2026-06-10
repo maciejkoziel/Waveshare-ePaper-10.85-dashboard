@@ -932,7 +932,7 @@ def render_screen(epd, fonts):
         y2 = y_cal_div + 15
 
     if ENABLE_CALENDAR:
-        draw.text((col2_x, y2), STRINGS.get('calendar_title', 'NADCHODZĄCE'), font=fonts['28'], fill="black")
+        draw.text((col2_x, y2), STRINGS.get('calendar_title', 'NADCHODZĄCE'), font=fonts['cal28'], fill="black")
         now_utc = datetime.now(timezone.utc)
         row_h = 27
         ey = y2 + 35
@@ -946,18 +946,18 @@ def render_screen(epd, fonts):
                 text_color = "red" if soon else "black"
                 sq_color = "black" if ev['calendar'] == 'personal' else "yellow"
                 draw.rectangle([col2_x + 2, ey + 5, col2_x + 13, ey + 16], fill=sq_color, outline="black")
-                draw.text((col2_x + 18, ey), ev['time'], font=fonts['20'], fill=text_color)
+                draw.text((col2_x + 18, ey), ev['time'], font=fonts['cal20'], fill=text_color)
                 if soon:
-                    draw.text((col2_x + 19, ey), ev['time'], font=fonts['20'], fill=text_color)
+                    draw.text((col2_x + 19, ey), ev['time'], font=fonts['cal20'], fill=text_color)
                 title = ev['title']
                 if len(title) > 26:
                     title = title[:25] + '…'
-                draw.text((col2_x + 130, ey), title, font=fonts['20'], fill=text_color)
+                draw.text((col2_x + 130, ey), title, font=fonts['cal20'], fill=text_color)
                 if soon:
-                    draw.text((col2_x + 131, ey), title, font=fonts['20'], fill=text_color)
+                    draw.text((col2_x + 131, ey), title, font=fonts['cal20'], fill=text_color)
                 ey += row_h
         else:
-            draw.text((col2_x, ey), STRINGS.get('calendar_empty', 'Brak nadchodzących wydarzeń'), font=fonts['20'], fill="black")
+            draw.text((col2_x, ey), STRINGS.get('calendar_empty', 'Brak nadchodzących wydarzeń'), font=fonts['cal20'], fill="black")
     elif ENABLE_BAMBU:
         p_status = str(printer.get('status', 'OFFLINE')).upper()
         draw_icon(draw, col2_x, y2, "icon_3d", (60, 60))
@@ -1120,6 +1120,8 @@ def main():
             '40': load_font('ElmsSans-Regular.ttf',40),
             '60': load_font('ElmsSans-Regular.ttf',60),
             '80': load_font('ElmsSans-Regular.ttf',80),
+            'cal20': load_font('AtkinsonHyperlegible-Regular.ttf', 20),
+            'cal28': load_font('AtkinsonHyperlegible-Bold.ttf', 28),
         }
 
         t_data = threading.Thread(target=update_data_thread)

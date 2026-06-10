@@ -1,14 +1,12 @@
 # Polish display strings
-# Note: diacritics (ą ę ó ś etc.) require a font with extended Latin support.
-# Aldrich-Regular does not include them — swap the font or use ASCII-safe versions.
 
 # Strava
 strava_title      = "STATYSTYKI STRAVA"
 strava_year_stats = "{year}: {dist} km | {prev_year}: {prev_dist} km"
-strava_total      = "Razem: {dist} km | {rides} aktywnosci"
+strava_total      = "Razem: {dist} km | {rides} aktywności"
 
 # System load
-sysload_title = "OBCIAZENIE: {cpu}%"
+sysload_title = "OBCIĄŻENIE: {cpu}%"
 ram_free      = "RAM wolne: {mb} MB"
 
 # Printer
@@ -16,33 +14,33 @@ printer_title = "DRUKARKA: {status}"
 
 # Roborock
 roborock_battery  = "Bat: {bat}% | {status}"
-roborock_cleaning = "Sprzat: {area} m2 ({pct}%)"
+roborock_cleaning = "Sprzątanie: {area} m2 ({pct}%)"
 roborock_last     = "Ost: {date} | {area} m2"
 
 # Antigravity
-antigravity_title  = "UZYCIE ANTIGRAVITY"
+antigravity_title  = "UŻYCIE ANTIGRAVITY"
 antigravity_model  = "{label} {pct}% | Za {time}"
-error_loading_data = "Blad ladowania"
+error_loading_data = "Błąd ładowania"
 
 # Internet
 internet_quality = "Internet: {ms} ms"
 
 # Weather
-air_quality_title = "JAKOSC POWIETRZA"
+air_quality_title = "JAKOŚĆ POWIETRZA"
 aqi_label         = "AQI:"
-humidity          = "Wilgotnosc: {hum}%"
-pressure          = "Cisnienie: {pres} hPa"
+humidity          = "Wilgotność: {hum}%"
+pressure          = "Ciśnienie: {pres} hPa"
 
 # Claude
-claude_title = "UZYCIE CLAUDE AI"
-claude_error = "Blad Claude AI"
+claude_title = "UŻYCIE CLAUDE AI"
+claude_error = "Błąd Claude AI"
 claude_5h    = "Limit 5h: {pct}% (Reset za {time})"
 claude_7d    = "Limit 7d: {pct}% (Reset za {time})"
 
 # Time progress
-time_progress_title = "POSTEP CZASU"
-label_day   = "DZIEN"
-label_month = "MIESIAC"
+time_progress_title = "POSTĘP CZASU"
+label_day   = "DZIEŃ"
+label_month = "MIESIĄC"
 label_year  = "ROK"
 
 # Gmail
@@ -55,6 +53,6 @@ time_days_hours    = "{days}d {hours}g"
 time_hours_minutes = "{hours}g {minutes}m"
 
 # Date/time formatting
-months   = ["Styczen","Luty","Marzec","Kwiecien","Maj","Czerwiec","Lipiec","Sierpien","Wrzesien","Pazdziernik","Listopad","Grudzien"]
-weekdays      = ["Pon","Wt","Sr","Czw","Pt","Sob","Nd"]
-weekdays_full = ["Poniedzialek","Wtorek","Sroda","Czwartek","Piatek","Sobota","Niedziela"]
+months        = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"]
+weekdays      = ["Pon","Wt","Śr","Czw","Pt","Sob","Nd"]
+weekdays_full = ["Poniedziałek","Wtorek","Środa","Czwartek","Piątek","Sobota","Niedziela"]

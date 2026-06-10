@@ -862,7 +862,7 @@ def render_screen(epd, fonts):
             size = cal_max_h
             while size > 8:
                 f = fonts['cal_font_cache'].get(size) or ImageFont.truetype(
-                    os.path.join(FONT_DIR, 'Oregano-Regular.ttf'), size)
+                    os.path.join(FONT_DIR, 'AntonSC-Regular.ttf'), size)
                 fonts['cal_font_cache'][size] = f
                 bb = draw.textbbox((0, 0), text, font=f)
                 if (bb[2] - bb[0]) <= cal_max_w and (bb[3] - bb[1]) <= cal_max_h:

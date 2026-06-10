@@ -1,132 +1,156 @@
 # Waveshare-ePaper-10.85 Dashboard
 
-A fully functional E-ink dashboard running on a Raspberry Pi Zero 2W. Designed for large Waveshare e-Paper displays (e.g., 10.85"), this project aggregates essential daily information and smart home status into a clean, minimalist interface.
+> **Fork of [czuryk/Waveshare-ePaper-10.85-dashboard](https://github.com/czuryk/Waveshare-ePaper-10.85-dashboard)**  
+> Extended to support the **4-color (G) variant** of the display, running on a **Raspberry Pi Zero W**.
+
+A fully functional E-ink dashboard running on a Raspberry Pi. Designed for the Waveshare 10.85" e-Paper display, this project aggregates essential daily information and smart home status into a clean, minimalist interface.
 
 ## Key Features
 
-* **(NEW!) Antigravity usage data:** Displays usage data for Antigravity, showing the limit, and limit reset time.
-* **Claude Code usage data:** Displays usage data for Claude Code, showing the daily limit, weekly limit, and limit reset time.
-* **Weather & Air Quality:** Real-time temperature, humidity, wind direction/speed, UV index, 4-hour forecast, and AQI (with visual inversion for high pollution levels) using the Open-Meteo API.
-* **Strava Integration:** Displays total and yearly activity statistics (distance and ride counts), including specific breakdowns for biking and hiking.
+* **4-color display support (G variant):** Fully ported to the `epd10in85g` driver — supports Red, Yellow, Black, and White on the Waveshare 10.85" e-Paper (G) panel (SKU 30411). Full refresh only, 180s minimum interval.
+* **Antigravity usage data:** Displays usage data for Antigravity, showing the limit and reset time.
+* **Claude Code usage data:** Displays usage data for Claude Code, showing the 5-hour limit, 7-day limit, and reset times.
+* **Weather & Air Quality:** Real-time temperature, humidity, wind direction/speed, UV index, 4-hour forecast, and AQI using the Open-Meteo API.
+* **Strava Integration:** Total and yearly activity statistics (distance and ride counts), including breakdowns for biking and hiking.
 * **Bambu Lab 3D Printer:** Live monitoring of print status, completion percentage, remaining time, and current layer progress.
-* **Roborock Vacuum:** Live battery level, current status, and tracking for cleaned area during active cleaning.
-* **Spotify:** Displays the currently playing track and artist.
+* **Roborock Vacuum:** Live battery level, current status, and cleaned area tracking during active cleaning.
+* **Spotify:** Displays the currently playing track and artist via Last.fm.
 * **Gmail:** Tracks the number of unread emails in your primary inbox.
-* **System Fallbacks:** Automatically switches to displaying System Load (CPU/RAM usage) or Cryptocurrency prices (BTC/ETH) if certain hardware integrations are disabled or offline for demonstration of dashboard capabilities. The fallback wedgets are not required tokens and ready to go.
-* **Optimized Rendering:** Uses partial screen refreshes to prevent flickering, with scheduled full refreshes to clear e-ink ghosting.
+* **System Fallbacks:** Automatically switches to System Load (CPU/RAM), Cryptocurrency prices (BTC/ETH), and Ping/Internet quality when hardware integrations are disabled.
 
-<img width="2400" height="1792" alt="dashboard_primary" src="https://github.com/user-attachments/assets/20be2eae-4a06-48e2-9ad4-efcba00dcb7f" />
-<img width="2400" height="1792" alt="dashboard_fallback" src="https://github.com/user-attachments/assets/158d65ee-9a12-4f09-a9d3-ea66ca3055bc" />
+---
+
+## Hardware
+
+| Component | Details |
+|-----------|---------|
+| Board | Raspberry Pi Zero W Rev 1.1 |
+| Display panel | Waveshare 10.85" e-Paper (G) — SKU 30411 — 4-color |
+| Display HAT | Waveshare 10.85" e-Paper HAT+ (BW HAT, physically compatible with G panel) |
+| Resolution | 1360 × 480 |
+| Colors | Red, Yellow, Black, White |
+
+> **Note on display variants:** The original repo targets the BW (black/white) HAT+. This fork uses the 4-color G panel with a custom driver (`epd10in85g` + `epdconfig_g`). The G panel does **not** support partial refresh — every update is a full 21-second refresh.
 
 ---
 
 ## Prerequisites & Installation
 
-### Hardware
-* [Raspberry Pi Zero 2W](https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/)
-* [Waveshare E-Ink Display 10.85"](https://www.waveshare.com/10.85inch-e-paper-hat-plus.htm?sku=29790)
-
 ### 1. System Setup
-Enable the SPI interface on your Raspberry Pi, which is required for communicating with the e-ink display:
-`sudo raspi-config`
-Go to Interfacing Options -> SPI -> Enable.
 
-Update your system and install necessary system-level dependencies, including `tmux` for keeping the script running in the background:
-`sudo apt update`
-`sudo apt install python3-pip python3-pil python3-numpy git tmux -y`
+Enable SPI on your Raspberry Pi:
+```bash
+sudo raspi-config
+# Interfacing Options -> SPI -> Enable
+```
+
+Install system dependencies:
+```bash
+sudo apt update
+sudo apt install python3-pip python3-pil python3-numpy git tmux -y
+```
 
 ### 2. Python Dependencies
-Install the required standard Python packages:
-`pip3 install requests Pillow google-api-python-client google-auth-httplib2 google-auth-oauthlib aiomqtt roborock`
 
-*Note: `bambulabs_api` library already included in this package.*
+```bash
+pip3 install --break-system-packages requests Pillow \
+  google-api-python-client google-auth-httplib2 google-auth-oauthlib \
+  aiomqtt roborock
+```
 
-### 3. Display Library
-The **patched** version of the epd10in85 library with fixed partial refresh issue already included in this package.
+> `bambulabs_api` is bundled in `lib/`. The G-display driver (`epd10in85g` + `epdconfig_g`) is also bundled in `lib/waveshare_epd/`.
+
+### 3. Clone and Run
+
+```bash
+git clone https://github.com/maciejkoziel/Waveshare-ePaper-10.85-dashboard.git
+cd Waveshare-ePaper-10.85-dashboard
+tmux new -s dashboard
+python3 main.py
+# Detach: Ctrl+B, then D
+```
 
 ---
 
-## Configuration & Widget Setup
+## Configuration
 
-All widget toggles and API configurations are located at the top of the `main.py` script. You can enable or disable specific widgets using the `ENABLE_*` boolean variables.
+All widget toggles and API configs are at the top of `main.py`:
+
+```python
+ENABLE_STRAVA = False
+ENABLE_BAMBU = False
+ENABLE_ROBOROCK = False
+ENABLE_ANTIGRAVITY = False
+ENABLE_CLAUDE = False
+ENABLE_SPOTIFY = False
+
+LOCATION_LAT = 44.8240855
+LOCATION_LON = 20.4934273
+```
 
 ### Claude Code
-1. Run the `main.py` script from the terminal for the first time.
-2. The script will pause, ask for your to copy the authorization URL and paste it on real browser.
-3. Open that URL in your browser, click "Authorize", and you will be redirected to a dead `localhost` page.
-7. Copy the whole URL containing `code=...` portion from your browser's address bar and paste it back into the terminal. The script will automatically fetch and save the required tokens to `claude_creds.json`.
+1. Run `main.py` from the terminal for the first time.
+2. Copy the authorization URL, open it in a browser, authorize, and paste back the redirect URL containing `code=...`.
+3. Tokens are saved to `claude_creds.json`.
 
 ### Strava
-1. Go to your Strava API Settings and create an API Application.
-2. Note down your **Client ID** and **Client Secret**.
-3. Run the `main.py` script from the terminal for the first time.
-4. The script will pause, ask for your ID/Secret, and print an authorization URL in the console. 
-5. Open that URL in your browser, click "Authorize", and you will be redirected to a dead `localhost` page.
-6. Copy the `code=...` portion from your browser's address bar and paste it back into the terminal. The script will automatically fetch and save the required `activity:read_all` tokens to `strava_token.json`.
+1. Create a Strava API Application and note your Client ID and Secret.
+2. Run `main.py` — it will print an authorization URL.
+3. Authorize in browser, paste the redirect URL back. Tokens saved to `strava_token.json`.
 
 ### Roborock
-1. Open `main.py` and input your Roborock account email address in the `ROBOROCK_CONF` dictionary.
-2. Run the script from the terminal.
-3. The script will request an OTP (One-Time Password) which will be sent to your email.
-4. Enter the 6-digit code in the terminal. The script will securely save your session data locally.
+1. Set your account email in `ROBOROCK_CONF` in `main.py`.
+2. Run the script — enter the 6-digit OTP sent to your email. Session saved to `roborock_session.pkl`.
 
 ### Bambu Lab 3D Printer
-**You DON'T need to enable "LAN Mode" on your Bambu Lab printer to access local data.**
-1. On your printer's screen, go to **Settings -> Network**.
-2. Note your printer's **IP Address**, **Serial Number**, and **Access Code**. (Force on your router to map exact IP address)
-3. Update the `PRINTER_CONF` dictionary in the script with these local credentials.
+1. On the printer: **Settings -> Network** — note IP, Serial Number, and Access Code.
+2. Update `PRINTER_CONF` in `main.py`.
 
 ### Spotify (via Last.fm)
-Since the official Spotify API requires running a local web server for complex token renewals, this dashboard uses Last.fm to fetch the current playing track reliably form Spotify. It's is transparent and working method.
 1. Connect your Spotify account to Last.fm.
-2. Create a Last.fm API account to generate an **API Key**.
-3. Update `LASTFM_CONF` in the script with your API Key and Last.fm Username.
-   
-**After configuration, you no longer need to use the Last.fm service, and a paid Last.fm account is not required. You can continue to use only the Spotify service.**
+2. Generate a Last.fm API Key and update `LASTFM_CONF` in `main.py`.
 
 ### Gmail
-1. Go to the Google Cloud Console.
-2. Create a new project and enable the **Gmail API**.
-3. Create OAuth 2.0 Client ID credentials (choose "Desktop Application" as the application type).
-4. Download the generated JSON file, rename it exactly to `credentials.json` (if your setup requires it, or just use `token.json` generation), and place it in the same directory as the script.
-5. On the first run, the script will open a browser window (or provide a link) for you to log in and grant read-only access. It will generate a `token.json` file for all future headless authentications.
+1. In Google Cloud Console: create a project, enable Gmail API, create OAuth 2.0 credentials (Desktop App).
+2. Download the credentials JSON and place it as `credentials.json` in the project directory.
+3. On first run the script will prompt for OAuth authorization and save `token.json`.
 
 ---
 
-## Running the Dashboard
+## Architecture
 
-To ensure the dashboard continues running even after you close your SSH connection, use `tmux`.
+- **Multi-threaded data fetching:** each service runs in its own background thread at its own interval
+- **Thread-safe data store:** renderer reads a snapshot under a lock, never blocks fetch threads
+- **Full refresh only (G variant):** ~21s per update, 180s minimum cycle enforced by sleep
+- **Hardware watchdog:** `signal.alarm(90)` triggers self-restart on display hang
+- **Periodic deep clean:** every 600 cycles, Init + Clear + display to eliminate ghosting
 
-1. Start a new tmux session:
-`tmux new -s dashboard`
+---
 
-2. Run the script inside the tmux session:
-`python3 main.py`
+## G Display Notes
 
-3. Detach from the session (leave it running in the background) by pressing:
-`Ctrl+B`, then release and press `D`.
+The 4-color G variant differs significantly from the BW version:
 
-To reattach to the session later and view the logs or stop the script:
-`tmux attach -t dashboard`
+| | BW version | G (color) version |
+|-|-----------|------------------|
+| Colors | Black, White | Red, Yellow, Black, White |
+| Full refresh | ~3.5s | **~21s** |
+| Partial refresh | ✅ | ❌ Not available |
+| Image mode | `"1"` (1bpp) | `"RGB"` → 4-color quantized |
+| Driver | `epd10in85.py` | `epd10in85g.py` |
+| Min refresh interval | 60s | **180s** |
 
-## How It Works
+Known hardware quirks fixed in this fork:
+- Skip `0x00` (Panel Setting) in Init — causes power-on hang on BW HAT + G panel combo
+- `Clear()` uses `width/4` bytes/row (not `width/2`) — official driver sends 2× too much data
+- SPI writes always go through `_spi_m` fd only — writing to both fds garbles the Init sequence on the shared bus
 
-The dashboard is built on a robust, multi-threaded architecture designed to keep the UI responsive and prevent hardware lockups.
+---
 
-* **Asynchronous Data Fetching:** Instead of fetching all data sequentially, the script spawns dedicated background threads. Each service (Weather, Strava, Roborock, Bambu Lab, etc.) pulls data asynchronously at its own specific interval. This ensures that a slow API response or a temporary network drop from one service will never block the others or freeze the system.
-* **Scheduled Rendering:** The main application loop acts purely as a renderer. It collects the latest available information from a thread-safe global data store and pushes a new frame to the e-ink display exactly once per minute using a partial screen refresh. 
+## 3D Printed Case
 
-**Important Notes:**
+Case STL files: [MakerWorld](https://makerworld.com/en/models/2322517-epaper-dashboard-waveshare-10-85)
 
-* **Initial Data Population Delay:** When you first launch the script, you will notice that the widgets may show placeholders or zeros, and the full array of data takes a few minutes to completely appear on the screen. This is an intentional design choice to stagger initial network requests. It prevents sudden spikes in CPU usage, avoids overwhelming the Raspberry Pi's network stack, and respects the rate limits of the external APIs.
-* **Hardware Refresh Limits:** The 60-second rendering interval is strictly enforced. Refreshing the screen more frequently than once a minute is strongly discouraged by the display manufacturer (Waveshare). Aggressive refresh rates on large e-paper panels can lead to severe ghosting and may cause permanent hardware damage to the display.
+## Video Assembly Guide
 
-## The 3d printed case
-
-You can download the case stl files [here](https://makerworld.com/en/models/2322517-epaper-dashboard-waveshare-10-85).
-
-## Video assembly guide
-
-[![Video Title](https://img.youtube.com/vi/H964RpaJvu0/0.jpg)](https://youtu.be/H964RpaJvu0)
-(Youtube clickable)
-
+[![Assembly guide](https://img.youtube.com/vi/H964RpaJvu0/0.jpg)](https://youtu.be/H964RpaJvu0)

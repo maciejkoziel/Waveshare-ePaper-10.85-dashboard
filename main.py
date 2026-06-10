@@ -18,6 +18,7 @@ import subprocess
 import math
 import calendar
 import urllib.parse
+import tomllib
 from collections import deque
 from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance
@@ -42,15 +43,54 @@ FONT_DIR = os.path.join(BASE_DIR, 'fnt')
 ICON_DIR = os.path.join(BASE_DIR, 'icons')
 LOG_FILE = os.path.join(BASE_DIR, 'dashboard.log')
 
-# ######################
-# --- WIDGET TOGGLES ---
-# ######################
-ENABLE_STRAVA = False
-ENABLE_BAMBU = False
-ENABLE_ROBOROCK = False
-ENABLE_ANTIGRAVITY = False
-ENABLE_CLAUDE = False
-ENABLE_SPOTIFY = False
+# --- LOCAL SETTINGS ---
+_cfg_path = os.path.join(BASE_DIR, 'settings_local.toml')
+try:
+    with open(_cfg_path, 'rb') as _f:
+        _cfg = tomllib.load(_f)
+    _w = _cfg.get('widgets', {})
+    ENABLE_STRAVA      = _w.get('enable_strava', False)
+    ENABLE_BAMBU       = _w.get('enable_bambu', False)
+    ENABLE_ROBOROCK    = _w.get('enable_roborock', False)
+    ENABLE_ANTIGRAVITY = _w.get('enable_antigravity', False)
+    ENABLE_CLAUDE      = _w.get('enable_claude', False)
+    ENABLE_SPOTIFY     = _w.get('enable_spotify', False)
+    _loc = _cfg.get('location', {})
+    LOCATION_LAT = _loc.get('lat', 44.8240855)
+    LOCATION_LON = _loc.get('lon', 20.4934273)
+    _p = _cfg.get('printer', {})
+    PRINTER_CONF = {'IP': _p.get('ip', ''), 'SERIAL': _p.get('serial', ''), 'ACCESS_CODE': _p.get('access_code', '')}
+    ROBOROCK_CONF = {'EMAIL': _cfg.get('roborock', {}).get('email', '')}
+    _lfm = _cfg.get('lastfm', {})
+    LASTFM_CONF = {'API_KEY': _lfm.get('api_key', ''), 'USERNAME': _lfm.get('username', '')}
+    LANGUAGE = _cfg.get('display', {}).get('language', 'en')
+    FORECAST_DAYS = _cfg.get('weather', {}).get('forecast_days', 5)
+except FileNotFoundError:
+    ENABLE_STRAVA = False
+    ENABLE_BAMBU = False
+    ENABLE_ROBOROCK = False
+    ENABLE_ANTIGRAVITY = False
+    ENABLE_CLAUDE = False
+    ENABLE_SPOTIFY = False
+    LOCATION_LAT = 44.8240855
+    LOCATION_LON = 20.4934273
+    PRINTER_CONF = {'IP': '', 'SERIAL': '', 'ACCESS_CODE': ''}
+    ROBOROCK_CONF = {'EMAIL': ''}
+    LASTFM_CONF = {'API_KEY': '', 'USERNAME': ''}
+    LANGUAGE = 'en'
+    FORECAST_DAYS = 5
+
+# --- LANGUAGE STRINGS ---
+LANG_DIR = os.path.join(BASE_DIR, 'lang')
+try:
+    with open(os.path.join(LANG_DIR, f'{LANGUAGE}.toml'), 'rb') as _f:
+        STRINGS = tomllib.load(_f)
+except FileNotFoundError:
+    try:
+        with open(os.path.join(LANG_DIR, 'en.toml'), 'rb') as _f:
+            STRINGS = tomllib.load(_f)
+    except FileNotFoundError:
+        STRINGS = {}
 
 # --- API ENDPOINTS ---
 API_ENDPOINTS = {
@@ -62,26 +102,6 @@ API_ENDPOINTS = {
     'btc': 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart',
     'eth': 'https://api.coingecko.com/api/v3/coins/ethereum/market_chart',
     'lastfm': 'http://ws.audioscrobbler.com/2.0/'
-}
-
-# --- CONFIGURATION ---
-# Change to your GEO location
-LOCATION_LAT = 44.8240855
-LOCATION_LON = 20.4934273
-
-PRINTER_CONF = {
-    'IP': '192.168....',
-    'SERIAL': '',
-    'ACCESS_CODE': ''
-}
-
-ROBOROCK_CONF = {
-    'EMAIL': 'email...'
-}
-
-LASTFM_CONF = {
-    'API_KEY': '',
-    'USERNAME': ''
 }
 
 STRAVA_CONF = {
@@ -258,22 +278,21 @@ def get_cached_icon(name, size, is_white=False):
 
 
 def time_until(iso_str):
-    if not iso_str: return "N/A"
+    if not iso_str: return STRINGS.get('not_available', 'N/A')
     try:
-        # Handling the explicit +00:00 timezone format
         target = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
         now = datetime.now(timezone.utc)
         diff = target - now
-        if diff.total_seconds() < 0: return "Resetting..."
+        if diff.total_seconds() < 0: return STRINGS.get('resetting', 'Resetting...')
         hours, rem = divmod(diff.total_seconds(), 3600)
         days, hours = divmod(hours, 24)
         if days > 0:
-            return f"{int(days)}d {int(hours)}h"
+            return STRINGS.get('time_days_hours', '{days}d {hours}h').format(days=int(days), hours=int(hours))
         else:
             minutes = rem // 60
-            return f"{int(hours)}h {int(minutes)}m"
+            return STRINGS.get('time_hours_minutes', '{hours}h {minutes}m').format(hours=int(hours), minutes=int(minutes))
     except Exception:
-        return "N/A"
+        return STRINGS.get('not_available', 'N/A')
 
 
 # --- AUTH & FETCH THREADS ---
@@ -555,7 +574,7 @@ def update_data_thread():
         now = time.time()
 
         if now - data_store.last_update['weather'] > 600:
-            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&hourly=temperature_2m,precipitation_probability,weather_code,cloud_cover&timezone=auto&forecast_days=2"
+            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days={FORECAST_DAYS}"
             aqi_url = f"{API_ENDPOINTS['aqi']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=european_aqi&timezone=auto"
             w_data = net.get_json(weather_url)
             a_data = net.get_json(aqi_url)
@@ -833,15 +852,18 @@ def render_screen(epd, fonts):
     y1 = 20
     if ENABLE_STRAVA:
         draw_icon(draw, col1_x, y1, "icon_strava", (60, 60))
-        draw.text((col1_x + 70, y1), "STRAVA STATS", font=fonts['28'], fill="black")
+        draw.text((col1_x + 70, y1), STRINGS.get('strava_title', 'STRAVA STATS'), font=fonts['28'], fill="black")
 
         now_y = datetime.now().year
         draw.text((col1_x + 70, y1 + 35),
-                  f"{now_y}: {strava.get('distance_curr', 0)} km | {now_y - 1}: {strava.get('distance_prev', 0)} km",
+                  STRINGS.get('strava_year_stats', '{year}: {dist} km | {prev_year}: {prev_dist} km').format(
+                      year=now_y, dist=strava.get('distance_curr', 0),
+                      prev_year=now_y - 1, prev_dist=strava.get('distance_prev', 0)),
                   font=fonts['20'], fill="black")
         draw.text((col1_x + 70, y1 + 60),
-                  f"Total: {strava.get('total_distance', 0)} km | {strava.get('rides', 0)} acts", font=fonts['20'],
-                  fill="black")
+                  STRINGS.get('strava_total', 'Total: {dist} km | {rides} acts').format(
+                      dist=strava.get('total_distance', 0), rides=strava.get('rides', 0)),
+                  font=fonts['20'], fill="black")
 
         draw_icon(draw, col1_x + 70, y1 + 85, "icon_bike", (30, 30))
         draw.text((col1_x + 105, y1 + 90), f"{strava.get('bike_total', 0)} km", font=fonts['20'], fill="black")
@@ -851,8 +873,8 @@ def render_screen(epd, fonts):
 
     else:
         draw_icon(draw, col1_x, y1, "icon_cpu", (50, 50))
-        draw.text((col1_x + 60, y1), f"SYSTEM LOAD: {sysload['cpu']}%", font=fonts['28'], fill="black")
-        draw.text((col1_x + 60, y1 + 35), f"RAM Free: {sysload['ram_free']} MB", font=fonts['20'], fill="black")
+        draw.text((col1_x + 60, y1), STRINGS.get('sysload_title', 'SYSTEM LOAD: {cpu}%').format(cpu=sysload['cpu']), font=fonts['28'], fill="black")
+        draw.text((col1_x + 60, y1 + 35), STRINGS.get('ram_free', 'RAM Free: {mb} MB').format(mb=sysload['ram_free']), font=fonts['20'], fill="black")
         draw_sparkline(draw, col1_x + 60, y1 + 60, list(sysload['history']), max_items=30, width=350, height=40,
                        style="bar")
 
@@ -863,7 +885,7 @@ def render_screen(epd, fonts):
     if ENABLE_BAMBU:
         p_status = str(printer.get('status', 'OFFLINE')).upper()
         draw_icon(draw, col1_x, y2, "icon_3d", (60, 60))
-        draw.text((col1_x + 70, y2), f"PRINTER: {p_status}", font=fonts['28'], fill="black")
+        draw.text((col1_x + 70, y2), STRINGS.get('printer_title', 'PRINTER: {status}').format(status=p_status), font=fonts['28'], fill="black")
         if p_status not in ["OFFLINE", "UNKNOWN", "FINISH"]:
             percent = printer.get('percentage', 0)
             draw.rectangle((col1_x + 70, y2 + 40, col1_x + 400, y2 + 60), outline="black")
@@ -886,22 +908,26 @@ def render_screen(epd, fonts):
     y3 = 340
     if ENABLE_ROBOROCK:
         draw_icon(draw, col1_x, y3, "icon_roborock", (50, 50))
-        draw.text((col1_x + 60, y3), f"Bat: {rob['battery']}% | {rob['status']}", font=fonts['28'], fill="black")
+        draw.text((col1_x + 60, y3), STRINGS.get('roborock_battery', 'Bat: {bat}% | {status}').format(bat=rob['battery'], status=rob['status']), font=fonts['28'], fill="black")
         if rob['is_cleaning']:
-            draw.text((col1_x + 60, y3 + 35), f"Clean: {rob['current_area']:.1f} m2 ({rob['pct']:.0f}%)",
+            draw.text((col1_x + 60, y3 + 35),
+                      STRINGS.get('roborock_cleaning', 'Clean: {area} m2 ({pct}%)').format(
+                          area=f"{rob['current_area']:.1f}", pct=f"{rob['pct']:.0f}"),
                       font=fonts['24'], fill="black")
             clamped_pct = min(rob['pct'], 100)
             draw.rectangle((col1_x + 60, y3 + 70, col1_x + 390, y3 + 90), outline="black")
             draw.rectangle((col1_x + 60, y3 + 70, col1_x + 60 + int(330 * (clamped_pct / 100)), y3 + 90), fill="black")
         else:
-            draw.text((col1_x + 60, y3 + 35), f"Last: {rob['last_date']} | {rob['ref_area']:.1f} m2", font=fonts['24'],
-                      fill="black")
+            draw.text((col1_x + 60, y3 + 35),
+                      STRINGS.get('roborock_last', 'Last: {date} | {area} m2').format(
+                          date=rob['last_date'], area=f"{rob['ref_area']:.1f}"),
+                      font=fonts['24'], fill="black")
     elif ENABLE_ANTIGRAVITY:
         draw_icon(draw, col1_x, y3, "icon_cpu", (50, 50))
-        draw.text((col1_x + 60, y3), "ANTIGRAVITY USAGE", font=fonts['28'], fill="black")
-        
+        draw.text((col1_x + 60, y3), STRINGS.get('antigravity_title', 'ANTIGRAVITY USAGE'), font=fonts['28'], fill="black")
+
         if antigravity.get('error'):
-            draw.text((col1_x + 60, y3 + 35), "Error loading data", font=fonts['20'], fill="black")
+            draw.text((col1_x + 60, y3 + 35), STRINGS.get('error_loading_data', 'Error loading data'), font=fonts['20'], fill="black")
         else:
             models = antigravity.get('models', [])
             opus = next((m for m in models if m.get('modelId') == 'claude-opus-4-6-thinking'), None)
@@ -914,7 +940,7 @@ def render_screen(epd, fonts):
                     pct = m_data.get('usedPercentage', 0)
                     rem_time = time_until(m_data.get('resetDate'))
                     
-                    draw.text((col1_x + 60, y_off), f"{label} {pct}% | In {rem_time}", font=fonts['20'], fill="black")
+                    draw.text((col1_x + 60, y_off), STRINGS.get('antigravity_model', '{label} {pct}% | In {time}').format(label=label, pct=pct, time=rem_time), font=fonts['20'], fill="black")
                     
                     bx, bw, bh = col1_x + 60, 330, 15
                     draw.rectangle((bx, y_off + 25, bx + bw, y_off + 25 + bh), outline="black", width=2)
@@ -924,7 +950,7 @@ def render_screen(epd, fonts):
                     y_off += 50
     else:
         draw_icon(draw, col1_x, y3, "icon_wifi", (50, 50))
-        draw.text((col1_x + 60, y3), f"Internet Quality: {ping['current']} ms", font=fonts['28'], fill="black")
+        draw.text((col1_x + 60, y3), STRINGS.get('internet_quality', 'Internet Quality: {ms} ms').format(ms=ping['current']), font=fonts['28'], fill="black")
         draw_sparkline(draw, col1_x, y3 + 60, list(ping['history']), max_items=50, width=400, height=40, style="bar")
 
     draw.line((col_w, 10, col_w, 470), fill="black", width=2)
@@ -966,8 +992,8 @@ def render_screen(epd, fonts):
         else:
             draw.text((uv_val_x, uv_val_y), uv_val_str, font=fonts['60'], fill="black")
 
-        draw.text((col2_x + 100, 95), f"Humidity: {hum}%", font=fonts['20'], fill="black")
-        draw.text((col2_x + 100, 120), f"Press: {pres} hPa", font=fonts['20'], fill="black")
+        draw.text((col2_x + 100, 95), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
+        draw.text((col2_x + 100, 120), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
 
         draw.line((col2_x, 140, col2_x + col_w - 40, 140), fill="black", width=2)
 
@@ -1010,8 +1036,8 @@ def render_screen(epd, fonts):
         draw.text((cx - tw / 2, cy + 25), spd_text, font=fonts['20'], fill="black")
 
         aqi_x = col2_x + 180
-        draw.text((aqi_x, y_c2 + 10), "AIR QUALITY", font=fonts['20'], fill="black")
-        draw.text((aqi_x, y_c2 + 55), "AQI:", font=fonts['28'], fill="black")
+        draw.text((aqi_x, y_c2 + 10), STRINGS.get('air_quality_title', 'AIR QUALITY'), font=fonts['20'], fill="black")
+        draw.text((aqi_x, y_c2 + 55), STRINGS.get('aqi_label', 'AQI:'), font=fonts['28'], fill="black")
 
         aqi_str = str(aqi)
         try:
@@ -1031,25 +1057,30 @@ def render_screen(epd, fonts):
 
         draw.line((col2_x, 320, col2_x + col_w - 40, 320), fill="black", width=2)
 
-        hourly = weather.get('hourly', {})
-        times = hourly.get('time', [])
-        temps = hourly.get('temperature_2m', [])
-        codes = hourly.get('weather_code', [])
+        daily = weather.get('daily', {})
+        d_times = daily.get('time', [])
+        d_tmax = daily.get('temperature_2m_max', [])
+        d_tmin = daily.get('temperature_2m_min', [])
+        d_codes = daily.get('weather_code', [])
 
-        cur_iso = datetime.now().strftime("%Y-%m-%dT%H:00")
-        try:
-            start_idx = times.index(cur_iso) + 1
-        except:
-            start_idx = 0
+        n_days = min(FORECAST_DAYS, len(d_times))
+        slot_w = (col_w - 40) // max(n_days, 1)
+        icon_sz = min(60, slot_w - 10)
+        weekdays = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
 
-        for i in range(4):
-            idx = start_idx + i
-            if idx < len(times):
-                off_x = col2_x + (i * 105)
-                draw.text((off_x + 10, 340), f"{times[idx].split('T')[1][:5]}", font=fonts['24'], fill="black")
-                draw_icon(draw, off_x + 15, 375, get_weather_icon(codes[idx], 1), (60, 60))
-                f_temp = math.floor(temps[idx] + 0.5)
-                draw.text((off_x + 15, 440), f"{f_temp}°C", font=fonts['24'], fill="black")
+        for i in range(n_days):
+            off_x = col2_x + (i * slot_w)
+            try:
+                day_dt = datetime.strptime(d_times[i], "%Y-%m-%d")
+                day_label = weekdays[day_dt.weekday()]
+            except Exception:
+                day_label = d_times[i][-5:] if d_times[i] else ''
+            draw.text((off_x + 4, 330), day_label, font=fonts['20'], fill="black")
+            draw_icon(draw, off_x + 4, 354, get_weather_icon(d_codes[i] if i < len(d_codes) else 0, 1), (icon_sz, icon_sz))
+            tmax = math.floor(d_tmax[i] + 0.5) if i < len(d_tmax) else 0
+            tmin = math.floor(d_tmin[i] + 0.5) if i < len(d_tmin) else 0
+            draw.text((off_x + 4, 354 + icon_sz + 4), f"{tmax}°", font=fonts['20'], fill="black")
+            draw.text((off_x + 4, 354 + icon_sz + 22), f"{tmin}°", font=fonts['20'], fill="black")
 
     draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)
 
@@ -1060,8 +1091,10 @@ def render_screen(epd, fonts):
     # 1. Time & Date
     draw.text((col3_x, 10), dt.strftime("%H:%M"), font=fonts['clock'], fill="black")
 
-    date_str = dt.strftime("%d %B %Y")
-    day_str = dt.strftime("%a").upper()
+    months = STRINGS.get('months', ['January','February','March','April','May','June','July','August','September','October','November','December'])
+    weekdays = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
+    date_str = f"{dt.day:02d} {months[dt.month - 1]} {dt.year}"
+    day_str = weekdays[dt.weekday()]
 
     draw.text((col3_x, 170), date_str, font=fonts['32'], fill="black")
     draw.text((col3_x + 340, 170), day_str, font=fonts['32'], fill="black")
@@ -1074,17 +1107,17 @@ def render_screen(epd, fonts):
     draw.rectangle((col3_x, sp_y, col3_x + 420, sp_y + 130), fill="white")
 
     if ENABLE_CLAUDE:
-        draw.text((col3_x, sp_y), "CLAUDE AI USAGE", font=fonts['28'], fill="black")
+        draw.text((col3_x, sp_y), STRINGS.get('claude_title', 'CLAUDE AI USAGE'), font=fonts['28'], fill="black")
 
         if claude.get('error'):
-            draw.text((col3_x, sp_y + 50), "Claude Usage Error", font=fonts['24'], fill="black")
+            draw.text((col3_x, sp_y + 50), STRINGS.get('claude_error', 'Claude Usage Error'), font=fonts['24'], fill="black")
         else:
             # 5-Hour Limit
             pct_5h = claude.get('five_hour', {}).get('utilization', 0)
             resets_5h = claude.get('five_hour', {}).get('resets_at')
             rem_5h = time_until(resets_5h)
 
-            draw.text((col3_x, sp_y + 40), f"5-Hour Limit: {pct_5h}% (Resets in {rem_5h})", font=fonts['20'], fill="black")
+            draw.text((col3_x, sp_y + 40), STRINGS.get('claude_5h', '5-Hour Limit: {pct}% (Resets in {time})').format(pct=pct_5h, time=rem_5h), font=fonts['20'], fill="black")
             bx, bw, bh = col3_x, 400, 15
             draw.rectangle((bx, sp_y + 65, bx + bw, sp_y + 65 + bh), outline="black", width=2)
             fill_w = int((bw - 4) * min(pct_5h / 100.0, 1.0))
@@ -1095,7 +1128,7 @@ def render_screen(epd, fonts):
             resets_7d = claude.get('seven_day', {}).get('resets_at')
             rem_7d = time_until(resets_7d)
 
-            draw.text((col3_x, sp_y + 90), f"7-Day Limit: {pct_7d}% (Resets in {rem_7d})", font=fonts['20'], fill="black")
+            draw.text((col3_x, sp_y + 90), STRINGS.get('claude_7d', '7-Day Limit: {pct}% (Resets in {time})').format(pct=pct_7d, time=rem_7d), font=fonts['20'], fill="black")
             draw.rectangle((bx, sp_y + 115, bx + bw, sp_y + 115 + bh), outline="black", width=2)
             fill_w = int((bw - 4) * min(pct_7d / 100.0, 1.0))
             if fill_w > 0: draw.rectangle((bx + 2, sp_y + 117, bx + 2 + fill_w, sp_y + 115 + bh - 2), fill="black")
@@ -1119,7 +1152,7 @@ def render_screen(epd, fonts):
     else:
         # Fallback: Time Progress
         tp_y = sp_y
-        draw.text((col3_x, tp_y), "TIME PROGRESS", font=fonts['28'], fill="black")
+        draw.text((col3_x, tp_y), STRINGS.get('time_progress_title', 'TIME PROGRESS'), font=fonts['28'], fill="black")
 
         day_pct = (dt.hour * 3600 + dt.minute * 60 + dt.second) / 86400.0
         days_in_m = calendar.monthrange(dt.year, dt.month)[1]
@@ -1139,16 +1172,16 @@ def render_screen(epd, fonts):
                     draw.rectangle((bx + 2, tp_y + y_offset + 4, bx + 2 + fill_w, tp_y + y_offset + bh), fill="black")
             draw.text((bx + bw + 15, tp_y + y_offset), f"{int(pct * 100)}%", font=fonts['24'], fill="black")
 
-        draw_prog(40, "DAY", day_pct)
-        draw_prog(75, "MONTH", month_pct)
-        draw_prog(110, "YEAR", year_pct)
+        draw_prog(40, STRINGS.get('label_day', 'DAY'), day_pct)
+        draw_prog(75, STRINGS.get('label_month', 'MONTH'), month_pct)
+        draw_prog(110, STRINGS.get('label_year', 'YEAR'), year_pct)
 
     draw.line((col3_x, 380, total_width - 20, 380), fill="black", width=2)
 
     # 3. Gmail
     gm_y = 400
     draw_icon(draw, col3_x, gm_y, "icon_mail", (60, 60))
-    draw.text((col3_x + 80, gm_y + 10), f"Unread Inbox: {gmail_unread}", font=fonts['35'], fill="black")
+    draw.text((col3_x + 80, gm_y + 10), STRINGS.get('gmail_unread', 'Unread Inbox: {count}').format(count=gmail_unread), font=fonts['35'], fill="black")
 
     return Himage
 

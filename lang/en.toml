@@ -1,0 +1,57 @@
+# English display strings
+
+# Strava
+strava_title      = "STRAVA STATS"
+strava_year_stats = "{year}: {dist} km | {prev_year}: {prev_dist} km"
+strava_total      = "Total: {dist} km | {rides} acts"
+
+# System load
+sysload_title = "SYSTEM LOAD: {cpu}%"
+ram_free      = "RAM Free: {mb} MB"
+
+# Printer
+printer_title = "PRINTER: {status}"
+
+# Roborock
+roborock_battery  = "Bat: {bat}% | {status}"
+roborock_cleaning = "Clean: {area} m2 ({pct}%)"
+roborock_last     = "Last: {date} | {area} m2"
+
+# Antigravity
+antigravity_title  = "ANTIGRAVITY USAGE"
+antigravity_model  = "{label} {pct}% | In {time}"
+error_loading_data = "Error loading data"
+
+# Internet
+internet_quality = "Internet Quality: {ms} ms"
+
+# Weather
+air_quality_title = "AIR QUALITY"
+aqi_label         = "AQI:"
+humidity          = "Humidity: {hum}%"
+pressure          = "Press: {pres} hPa"
+
+# Claude
+claude_title = "CLAUDE AI USAGE"
+claude_error = "Claude Usage Error"
+claude_5h    = "5-Hour Limit: {pct}% (Resets in {time})"
+claude_7d    = "7-Day Limit: {pct}% (Resets in {time})"
+
+# Time progress
+time_progress_title = "TIME PROGRESS"
+label_day   = "DAY"
+label_month = "MONTH"
+label_year  = "YEAR"
+
+# Gmail
+gmail_unread = "Unread Inbox: {count}"
+
+# Utilities
+resetting      = "Resetting..."
+not_available  = "N/A"
+time_days_hours   = "{days}d {hours}h"
+time_hours_minutes = "{hours}h {minutes}m"
+
+# Date/time formatting
+months   = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+weekdays = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]

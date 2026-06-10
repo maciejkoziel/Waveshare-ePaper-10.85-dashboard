@@ -1,0 +1,18 @@
+settings_local.toml
+
+# OAuth / session tokens
+strava_token.json
+token.json
+credentials.json
+claude_creds.json
+roborock_session.pkl
+roborock_stats.json
+
+# Logs
+dashboard.log
+dashboard.log.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

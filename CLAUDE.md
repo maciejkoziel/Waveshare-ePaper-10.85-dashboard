@@ -63,7 +63,7 @@ The (G) color version is **fundamentally different** from the black/white `epd10
 | Init method | `epd.init()` | `epd.Init()` |
 | Display method | `epd.display(buf)` + `epd.display_Partial(...)` | `epd.display(buf)` only |
 
-**The current `main.py` uses the BW driver and calls `display_Partial()` — this must be replaced for the G version.**
+**The G driver (`epd10in85g.py` + `epdconfig_g.py`) is fully in use. The BW driver (`epd10in85.py`) is unused.**
 
 ### GPIO Pin Wiring (Pi 40-pin header)
 
@@ -122,8 +122,12 @@ epd.Init()              # initialize hardware (sends init sequence, waits for BU
 epd.Clear()             # fill white, trigger full refresh (~21s)
 buf = epd.getbuffer(image)   # convert RGB image → 2bpp packed buffer
 epd.display(buf)        # send buffer to both ICs, trigger full refresh (~21s)
-epd.sleep()             # enter deep sleep (POWER_OFF + DEEP_SLEEP commands)
+epd.PowerOff()          # park panel rail — keeps GPIO/SPI claimed, avoids flicker on next wake
+epd.PowerOn()           # wake panel (assumes Init already done — no re-init needed)
+epd.sleep()             # full deep sleep (POWER_OFF + DEEP_SLEEP + module_exit)
 ```
+
+**Production cycle (main.py):** `PowerOn()` → `display()` → `PowerOff()` every refresh. `sleep()` + `Init()` + `Clear()` only once every 600 cycles (~30h) to clear ghosting. This avoids the extra flash that a full sleep/wake would cause each cycle.
 
 **After `sleep()`, must call `Init()` again before next `display()`.**
 
@@ -192,7 +196,7 @@ ssh maciej@192.168.12.175 'tmux attach -t dashboard'
 
 ## On-Demand Refresh
 
-The dashboard refreshes every 60 seconds, but you can trigger an immediate refresh at any time via SIGUSR1.
+The dashboard refreshes on data change with a minimum interval of 180 seconds (Waveshare spec). You can trigger an immediate refresh at any time via SIGUSR1.
 
 **After every change to the dashboard, always trigger a manual refresh to verify the result on screen:**
 
@@ -213,10 +217,11 @@ main.py              # Main script — widget logic, rendering, main loop
 claude.py            # Claude Code usage data fetcher
 antigravity.py       # Antigravity usage data fetcher
 lib/
-  waveshare_epd/     # Display driver (currently BW epd10in85 — needs replacing with G version)
+  waveshare_epd/     # Display drivers: epd10in85g.py + epdconfig_g.py (active), epd10in85.py (unused)
   bambulabs_api/     # Bundled Bambu Lab printer API
-fnt/                 # Fonts: Aldrich-Regular, advanced_led_board-7, Font
+fnt/                 # Fonts (see Font Notes below)
 icons/               # BMP icons for widgets
+lang/                # i18n strings: en.toml, pl.toml
 dashboard.log        # Rotating log (1 MB max, 1 backup)
 ```
 
@@ -230,17 +235,19 @@ Credential/token files (not in repo, created on first run):
 
 ## Architecture
 
-**Multi-threaded, render-on-schedule:**
+**Multi-threaded, change-driven refresh:**
 - Background threads fetch data per-service (`update_data_thread`, `roborock_update_thread`)
-- Main loop calls `render_screen()` once per cycle using full refresh
-- Hardware watchdog via `signal.alarm(20)` — hangs trigger `os.execv` self-restart
+- Main loop renders on data change with `MIN_REFRESH_INTERVAL = 180` s rate-limit
+- Hardware watchdog via `signal.alarm(90)` — hangs trigger `os.execv` self-restart
 - Icon cache (`icon_cache` dict) prevents repeated disk reads
 - GC runs every 10 refresh cycles
+- Every 600 refreshes (~30h): full `sleep()` → `Init()` → `Clear()` to eliminate ghosting
 
 **Refresh timing (G version — hardware enforced):**
 - Full refresh: ~21 seconds per update
-- Minimum cycle interval: 180 seconds (Waveshare requirement)
+- Minimum cycle interval: 180 seconds (Waveshare requirement — do not lower)
 - No partial refresh available
+- `PowerOn()` / `PowerOff()` used each cycle to park panel rail without releasing GPIO/SPI
 
 ## Widget Toggles
 
@@ -257,18 +264,74 @@ ENABLE_SPOTIFY = False
 
 Disabled widgets fall back to: CPU/RAM load or BTC/ETH crypto prices.
 
+## Font Notes
+
+Fonts live in `fnt/`. The active calendar font is **AntonSC-Regular.ttf** (Anton SC from Google Fonts) — it supports full Polish diacritics (ą ę ó ś ź ż etc.). All other widgets use **Aldrich-Regular.ttc**, which does NOT support Polish diacritics.
+
+Available fonts:
+- `Aldrich-Regular.ttc` — used for all widget text
+- `AntonSC-Regular.ttf` — calendar widget, Polish diacritic support confirmed
+- `Oregano-Regular.ttf`, `Oregano-Italic.ttf` — available, not currently used
+- `BilboSwashCaps-Regular.ttf` — available, not currently used
+- `advanced_led_board-7.ttc`, `Font.ttc` — legacy, retained
+
+**To add a Google Font:** fetch the CSS from `fonts.googleapis.com`, extract the `.ttf` URL, `curl` it into `fnt/`, verify Polish chars render (use the PIL test snippet below), then load via `ImageFont.truetype`.
+
+```python
+# Verify font supports Polish chars before using
+from PIL import ImageFont, Image, ImageDraw
+f = ImageFont.truetype('fnt/SomeFont.ttf', 40)
+img = Image.new('RGB', (800, 60), 'white')
+draw = ImageDraw.Draw(img)
+draw.text((0, 5), 'Październik Środa Poniedziałek', font=f, fill='black')
+bb = draw.textbbox((0,0), 'test', font=f)
+print('OK')  # no exception = font loaded and rendered
+```
+
 ## Configuration
 
 At the top of `main.py`:
 
 ```python
-LOCATION_LAT = 44.8240855   # Open-Meteo weather + AQI
-LOCATION_LON = 20.4934273
+LOCATION_LAT = 49.6790190   # Mecina, Poland — Open-Meteo weather + AQI
+LOCATION_LON = 20.5495183
 
 PRINTER_CONF = {'IP': ..., 'SERIAL': ..., 'ACCESS_CODE': ...}
 ROBOROCK_CONF = {'EMAIL': ...}
 LASTFM_CONF = {'API_KEY': ..., 'USERNAME': ...}
 ```
+
+## Layout
+
+Display is 1360×480. `render_screen()` in `main.py` divides it into three equal columns (`col_w = 1360 // 3 = 453px`) with a top calendar band spanning col1+col2.
+
+```
+y=0  ┌──────────────────────────────────────────┬──────────────┐
+     │  Calendar (single line, Anton SC)         │              │
+y=65 ├──────────────────────────────────────────┤   col3       │
+     │  col1 (Widgets)   │  col2 (Weather)       │  (Claude /   │
+     │                   │                       │  Spotify /   │
+     │  Strava (opt)     │  Temp + icon + UV     │  Progress /  │
+y=165├───────────────────┤  (y=65–205)           │  Gmail)      │
+     │  Bambu 3D printer │                       │              │
+     │  (y=80 or 185)    │  Wind + AQI           │              │
+     │                   │  (y=205–365)          │              │
+y=320├───────────────────┼───────────────────────┤              │
+     │  Roborock /       │  5-day forecast       │              │
+     │  Antigravity /    │  (y=375–469)          │              │
+     │  Ping / SysLoad   │                       │              │
+y=470└───────────────────┴───────────────────────┴──────────────┘
+```
+
+**Key constants:**
+- `y_cal_div = 65` — bottom of calendar band / top of col1+col2 content
+- `C2 = 45` — vertical offset applied to all col2 y-coordinates (col2 shifted down to make room for calendar band)
+- `col1_x = 20` — left margin
+- `col2_x = col_w + 20` — col2 left edge
+- `col3_x = col_w * 2 + 30` — col3 left edge
+- Forecast `icon_sz` capped at 50 (not 60) to prevent bottom overflow after C2 shift
+
+**i18n:** `lang/pl.toml` and `lang/en.toml`. All Polish strings use full diacritics. `weekdays_full` key holds unabbreviated weekday names used by the calendar.
 
 ## Pi Zero Constraints
 
@@ -295,6 +358,17 @@ ssh maciej@192.168.12.175 'pip3 install <package>'
 ---
 
 ## Troubleshooting
+
+### Screen flickering during refresh — expected behavior
+
+**Symptom:** Screen flashes through red/yellow/black/white several times during each refresh.
+
+**Root cause:** This is the (G) panel's 4-color waveform — it physically cycles all ink states to clear afterimages before settling. Unavoidable. There is no alternative LUT, no fast mode, no partial refresh on this panel.
+
+**Minimizing perceived flicker:**
+- `MIN_REFRESH_INTERVAL = 180` — never go below this. At 30s it feels constant and violates spec.
+- Use `PowerOn()` / `PowerOff()` between refreshes instead of `sleep()` / `Init()` — avoids the extra Reset/Init flash each cycle.
+- `Clear()` once per 600 cycles, not per cycle — each `Clear()` is a full waveform flash.
 
 ### Display BUSY pin stuck — SPI not working
 

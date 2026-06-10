@@ -1162,7 +1162,7 @@ def main():
         epd = epd10in85g.EPD()
         epd.Init()
         epd.Clear()
-        epd.sleep()
+        epd.PowerOff()
 
         def load_font(name, size):
             return ImageFont.truetype(os.path.join(FONT_DIR, name), size)
@@ -1199,17 +1199,18 @@ def main():
 
                 if refresh_counter >= 600:
                     logging.info("Full Refresh with Clear")
+                    epd.sleep()   # release GPIO/SPI for clean reinit
                     epd.Init()
                     epd.Clear()
                     epd.display(buf)
                     refresh_counter = 0
                 else:
                     logging.info("Full Refresh")
-                    epd.Init()
+                    epd.PowerOn()
                     epd.display(buf)
                     refresh_counter += 1
 
-                epd.sleep()
+                epd.PowerOff()
                 signal.alarm(0)
                 del image
                 del buf

@@ -632,19 +632,19 @@ def update_data_thread():
                             try:
                                 if is_allday:
                                     dt_ev = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-                                    time_str = dt_ev.strftime('%d.%m')
+                                    event_date = datetime.strptime(start, '%Y-%m-%d').date()
                                 else:
                                     dt_ev = datetime.fromisoformat(start.replace('Z', '+00:00'))
-                                    time_str = dt_ev.astimezone().strftime('%d.%m %H:%M')
+                                    event_date = dt_ev.astimezone().date()
                             except Exception:
                                 dt_ev = datetime.now(timezone.utc)
-                                time_str = start[:10]
+                                event_date = dt_ev.date()
                                 is_allday = True
                             all_events.append({
                                 'title': ev.get('summary', '?'),
-                                'time': time_str,
                                 'calendar': cal_type,
                                 'dt': dt_ev,
+                                'event_date': event_date,
                                 'allday': is_allday,
                             })
                     all_events.sort(key=lambda e: e['dt'])
@@ -934,7 +934,12 @@ def render_screen(epd, fonts):
     if ENABLE_CALENDAR:
         draw.text((col2_x, y2), STRINGS.get('calendar_title', 'NADCHODZĄCE'), font=fonts['cal28'], fill="black")
         now_utc = datetime.now(timezone.utc)
+        today_date = datetime.now().date()
         row_h = 27
+        # Fixed column positions: [sq] [day_label] [HH:MM] [title]
+        x_day   = col2_x + 18   # day label ("dziś", "jutro", "+3")
+        x_time  = col2_x + 88   # HH:MM (fixed, blank for all-day)
+        x_title = col2_x + 148  # event title
         ey = y2 + 35
         if calendar_events:
             for ev in calendar_events:
@@ -946,15 +951,26 @@ def render_screen(epd, fonts):
                 text_color = "red" if soon else "black"
                 sq_color = "black" if ev['calendar'] == 'personal' else "yellow"
                 draw.rectangle([col2_x + 2, ey + 5, col2_x + 13, ey + 16], fill=sq_color, outline="black")
-                draw.text((col2_x + 18, ey), ev['time'], font=fonts['cal20'], fill=text_color)
-                if soon:
-                    draw.text((col2_x + 19, ey), ev['time'], font=fonts['cal20'], fill=text_color)
+                delta = (ev['event_date'] - today_date).days
+                if delta == 0:
+                    day_label = STRINGS.get('calendar_today', 'dziś')
+                elif delta == 1:
+                    day_label = STRINGS.get('calendar_tomorrow', 'jutro')
+                else:
+                    day_label = f"+{delta}"
+                time_part = '' if ev.get('allday') else dt_ev.astimezone().strftime('%H:%M')
+                draw.text((x_day, ey), day_label, font=fonts['cal20'], fill=text_color)
+                if time_part:
+                    draw.text((x_time, ey), time_part, font=fonts['cal20'], fill=text_color)
                 title = ev['title']
-                if len(title) > 26:
-                    title = title[:25] + '…'
-                draw.text((col2_x + 130, ey), title, font=fonts['cal20'], fill=text_color)
+                if len(title) > 22:
+                    title = title[:21] + '…'
+                draw.text((x_title, ey), title, font=fonts['cal20'], fill=text_color)
                 if soon:
-                    draw.text((col2_x + 131, ey), title, font=fonts['cal20'], fill=text_color)
+                    draw.text((x_day + 1, ey), day_label, font=fonts['cal20'], fill=text_color)
+                    if time_part:
+                        draw.text((x_time + 1, ey), time_part, font=fonts['cal20'], fill=text_color)
+                    draw.text((x_title + 1, ey), title, font=fonts['cal20'], fill=text_color)
                 ey += row_h
         else:
             draw.text((col2_x, ey), STRINGS.get('calendar_empty', 'Brak nadchodzących wydarzeń'), font=fonts['cal20'], fill="black")

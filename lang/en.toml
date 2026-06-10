@@ -44,8 +44,10 @@ label_month = "MONTH"
 label_year  = "YEAR"
 
 # Calendar
-calendar_title = "UPCOMING"
-calendar_empty = "No upcoming events"
+calendar_title    = "UPCOMING"
+calendar_empty    = "No upcoming events"
+calendar_today    = "today"
+calendar_tomorrow = "tomorrow"
 
 # Gmail
 gmail_unread = "Unread Inbox: {count}"

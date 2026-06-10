@@ -830,7 +830,7 @@ def render_screen(epd, fonts):
         size = cal_max_h
         while size > 8:
             f = fonts['cal_font_cache'].get(size) or ImageFont.truetype(
-                os.path.join(FONT_DIR, 'Doto-Regular.ttf'), size)
+                os.path.join(FONT_DIR, 'Doto-Bold.ttf'), size)
             fonts['cal_font_cache'][size] = f
             bb = draw.textbbox((0, 0), text, font=f)
             if (bb[2] - bb[0]) <= cal_max_w and (bb[3] - bb[1]) <= cal_max_h:
@@ -852,8 +852,6 @@ def render_screen(epd, fonts):
         hum = cur.get('relative_humidity_2m', 0)
         pres = cur.get('surface_pressure', 0)
         w_code = cur.get('weather_code', 0)
-        wind_dir = cur.get('wind_direction_10m', 0)
-        wind_spd = cur.get('wind_speed_10m', 0)
         is_day = cur.get('is_day', 1)
         uv_index = cur.get('uv_index', 0.0)
 
@@ -885,46 +883,6 @@ def render_screen(epd, fonts):
 
         draw.line((col1_x, 210, col_w - 20, 210), fill="black", width=2)
 
-        y_w2 = 220
-        draw_icon(draw, col1_x + 5, y_w2, "icon_wind", (30, 30))
-
-        cx = col1_x + (col_w - 2 * col1_x) // 2
-        cy, r = y_w2 + 70, 55
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline="black", width=2)
-
-        for angle in range(0, 360, 45):
-            rad_tick = math.radians(angle)
-            inner_r = r - 8 if angle % 90 == 0 else r - 4
-            tx1, ty1 = cx + inner_r * math.cos(rad_tick), cy + inner_r * math.sin(rad_tick)
-            tx2, ty2 = cx + r * math.cos(rad_tick), cy + r * math.sin(rad_tick)
-            draw.line((tx1, ty1, tx2, ty2), fill="black", width=2)
-
-        draw.text((cx - 8, cy - r - 22), "N", font=fonts['20'], fill="black")
-        draw.text((cx - 8, cy + r + 4), "S", font=fonts['20'], fill="black")
-        draw.text((cx + r + 6, cy - 10), "E", font=fonts['20'], fill="black")
-        draw.text((cx - r - 24, cy - 10), "W", font=fonts['20'], fill="black")
-
-        rad_arrow = math.radians(wind_dir - 90)
-        tip_x = cx + (r - 12) * math.cos(rad_arrow)
-        tip_y = cy + (r - 12) * math.sin(rad_arrow)
-        base_angle = math.radians(150)
-        left_x = cx + 20 * math.cos(rad_arrow + base_angle)
-        left_y = cy + 20 * math.sin(rad_arrow + base_angle)
-        right_x = cx + 20 * math.cos(rad_arrow - base_angle)
-        right_y = cy + 20 * math.sin(rad_arrow - base_angle)
-        draw.polygon([(tip_x, tip_y), (left_x, left_y), (right_x, right_y)], fill="black")
-        draw.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill="black")
-
-        spd_text = f"{wind_spd} km/h"
-        try:
-            bbox = draw.textbbox((0, 0), spd_text, font=fonts['20'])
-            tw = bbox[2] - bbox[0]
-        except AttributeError:
-            tw = draw.textsize(spd_text, font=fonts['20'])[0]
-        draw.text((cx - tw / 2, cy + 25), spd_text, font=fonts['20'], fill="black")
-
-        draw.line((col1_x, 370, col_w - 20, 370), fill="black", width=2)
-
         daily = weather.get('daily', {})
         d_times = daily.get('time', [])
         d_tmax = daily.get('temperature_2m_max', [])
@@ -934,7 +892,7 @@ def render_screen(epd, fonts):
         n_days = min(FORECAST_DAYS, len(d_times))
         slot_w = (col_w - 40) // max(n_days, 1)
         icon_sz = min(50, slot_w - 10)
-        f_y = 375
+        f_y = 220
         for i in range(n_days):
             off_x = col1_x + (i * slot_w)
             try:

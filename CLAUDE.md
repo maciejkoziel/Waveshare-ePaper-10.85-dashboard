@@ -327,6 +327,10 @@ Standard `spidev` deasserts CE (chip select) between every `writebytes()` call â
 
 Official `epd10in85g.py` Clear sends `width/2 = 340` bytes/row per IC. Correct is `width/4 = 170` bytes (at 2bpp, 680px/IC = 170 bytes/row). Sending double data causes `TurnOnDisplay` to hang. Fixed in our driver.
 
+### Bug in `epdconfig_g.py`: double-write on shared SPI bus
+
+`spidev0.0` and `spidev0.1` (`_spi_m` and `_spi_s`) share the same physical SPI bus (MOSI/CLK). The original `spi_writebyte` and `spi_writebyte2` wrote to both fds when both CS were active (e.g. during `CS_ALL(0)` in Init), sending every byte twice. This garbled the Init sequence â€” most critically the resolution register (0x61), causing corrupted display output. **Fix:** always write via `_spi_m` only; CS selection via pinctrl determines which IC listens.
+
 ### Testing the display
 
 ```bash

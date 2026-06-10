@@ -242,9 +242,34 @@ class DataStore:
             'spotify': 0, 'crypto': 0, 'sysload': 0, 'ping': 0,
             'claude': 0, 'antigravity': 0
         }
+        self.data_changed = threading.Event()
+        self.last_fingerprint = None
 
 
 data_store = DataStore()
+
+
+def get_data_fingerprint(ds):
+    with ds.lock:
+        return (
+            ds.weather.get('current', {}).get('temperature_2m'),
+            ds.weather.get('current', {}).get('weather_code'),
+            ds.aqi,
+            ds.gmail_unread,
+            ds.crypto['btc'],
+            ds.crypto['eth'],
+            int(ds.ping['current'] / 5) * 5,
+            ds.sysload['cpu'] // 10,
+            ds.printer.get('status'),
+            ds.roborock.get('status'),
+            ds.roborock.get('battery'),
+            ds.roborock.get('is_cleaning'),
+            ds.spotify.get('status'),
+            ds.spotify.get('text'),
+            ds.claude.get('five_hour', {}).get('utilization'),
+            ds.claude.get('seven_day', {}).get('utilization'),
+            str(ds.antigravity.get('models', [])),
+        )
 
 
 # --- HELPERS ---
@@ -770,6 +795,10 @@ def update_data_thread():
             data_store.last_update['spotify'] = now
 
         gc.collect()
+        new_fp = get_data_fingerprint(data_store)
+        if new_fp != data_store.last_fingerprint:
+            data_store.last_fingerprint = new_fp
+            data_store.data_changed.set()
         time.sleep(1)
 
 
@@ -1089,20 +1118,18 @@ def render_screen(epd, fonts):
     dt = datetime.now()
 
     # 1. Time & Date
-    draw.text((col3_x, 10), dt.strftime("%H:%M"), font=fonts['clock'], fill="black")
-
     months = STRINGS.get('months', ['January','February','March','April','May','June','July','August','September','October','November','December'])
     weekdays = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
     date_str = f"{dt.day:02d} {months[dt.month - 1]} {dt.year}"
     day_str = weekdays[dt.weekday()]
 
-    draw.text((col3_x, 170), date_str, font=fonts['32'], fill="black")
-    draw.text((col3_x + 340, 170), day_str, font=fonts['32'], fill="black")
+    draw.text((col3_x, 10), date_str, font=fonts['32'], fill="black")
+    draw.text((col3_x + 340, 10), day_str, font=fonts['32'], fill="black")
 
-    draw.line((col3_x, 220, total_width - 20, 220), fill="black", width=2)
+    draw.line((col3_x, 50, total_width - 20, 50), fill="black", width=2)
 
     # 2. Claude AI OR Spotify OR Time Progress
-    sp_y = 240
+    sp_y = 70
     # Clear background for widget
     draw.rectangle((col3_x, sp_y, col3_x + 420, sp_y + 130), fill="white")
 
@@ -1176,10 +1203,10 @@ def render_screen(epd, fonts):
         draw_prog(75, STRINGS.get('label_month', 'MONTH'), month_pct)
         draw_prog(110, STRINGS.get('label_year', 'YEAR'), year_pct)
 
-    draw.line((col3_x, 380, total_width - 20, 380), fill="black", width=2)
+    draw.line((col3_x, 210, total_width - 20, 210), fill="black", width=2)
 
     # 3. Gmail
-    gm_y = 400
+    gm_y = 230
     draw_icon(draw, col3_x, gm_y, "icon_mail", (60, 60))
     draw.text((col3_x + 80, gm_y + 10), STRINGS.get('gmail_unread', 'Unread Inbox: {count}').format(count=gmail_unread), font=fonts['35'], fill="black")
 
@@ -1215,7 +1242,6 @@ def main():
             '40': load_font('Aldrich-Regular.ttc', 40),
             '60': load_font('Aldrich-Regular.ttc', 60),
             '80': load_font('Aldrich-Regular.ttc', 80),
-            'clock': load_font('advanced_led_board-7.ttc', 180),
         }
 
         t_data = threading.Thread(target=update_data_thread)
@@ -1228,6 +1254,7 @@ def main():
             t_robo.start()
 
         refresh_counter = 0
+        MIN_REFRESH_INTERVAL = 30
 
         while True:
             start_time = time.time()
@@ -1268,10 +1295,19 @@ def main():
                 signal.alarm(0)
                 logging.error(f"Unexpected error in main: {e}")
 
-            elapsed = time.time() - start_time
-            sleep_time = max(0, 60 - elapsed)
-            refresh_event.wait(timeout=sleep_time)
+            data_store.data_changed.clear()
             refresh_event.clear()
+
+            while True:
+                elapsed = time.time() - start_time
+                if refresh_event.is_set():
+                    refresh_event.clear()
+                    break
+                if elapsed >= MIN_REFRESH_INTERVAL:
+                    break
+                remaining = MIN_REFRESH_INTERVAL - elapsed
+                data_store.data_changed.wait(timeout=min(remaining, 1.0))
+                data_store.data_changed.clear()
 
     except KeyboardInterrupt:
         try:

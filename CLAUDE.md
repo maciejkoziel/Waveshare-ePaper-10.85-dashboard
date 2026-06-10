@@ -180,12 +180,17 @@ epd.display(buf)   # takes ~21 seconds
 
 ## Development Workflow
 
+**After every code change: push → pull on Pi → restart → trigger refresh.**
+
 ```bash
 # 1. Edit locally, commit and push
 git add -p && git commit -m "..." && git push
 
 # 2. Pull on Pi and restart
-ssh maciej@192.168.12.175 'cd ~/Waveshare-ePaper-10.85-dashboard && git pull && tmux kill-session -t dashboard; tmux new-session -d -s dashboard "python3 main.py"'
+ssh maciej@192.168.12.175 'cd ~/Waveshare-ePaper-10.85-dashboard && git pull && tmux kill-session -t dashboard 2>/dev/null; tmux new-session -d -s dashboard "python3 main.py"'
+
+# 3. Trigger immediate refresh (run after a few seconds for process to start)
+ssh maciej@192.168.12.175 'kill -USR1 $(pgrep -f main.py | head -1)'
 
 # Watch logs
 ssh maciej@192.168.12.175 'tail -f ~/Waveshare-ePaper-10.85-dashboard/dashboard.log'
@@ -196,19 +201,13 @@ ssh maciej@192.168.12.175 'tmux attach -t dashboard'
 
 ## On-Demand Refresh
 
-The dashboard refreshes on data change with a minimum interval of 180 seconds (Waveshare spec). You can trigger an immediate refresh at any time via SIGUSR1.
-
-**After every change to the dashboard, always trigger a manual refresh to verify the result on screen:**
+Dashboard refreshes on data change, min 180s interval. Trigger immediate refresh via SIGUSR1:
 
 ```bash
-# Trigger immediate refresh from Mac
-ssh maciej@192.168.12.175 'kill -USR1 $(pgrep -f main.py)'
-
-# Or directly on the Pi
-kill -USR1 $(pgrep -f main.py)
+ssh maciej@192.168.12.175 'kill -USR1 $(pgrep -f main.py | head -1)'
 ```
 
-This skips the remaining wait in the current 60s cycle and renders immediately. The display still takes ~21s to physically refresh (inherent to e-paper hardware).
+Display still takes ~21s to physically update after signal.
 
 ## Project Structure
 
@@ -243,6 +242,8 @@ Credential/token files (not in repo, created on first run):
 - GC runs every 10 refresh cycles
 - Every 600 refreshes (~30h): full `sleep()` → `Init()` → `Clear()` to eliminate ghosting
 
+**Weather fetch:** every 600s. Uses `fetch_with_retry(url, retries=3, delay=5)` — retries up to 3× with 5s delay on failure. `last_update['weather']` only set on success, so failed fetches retry next loop (~1s).
+
 **Refresh timing (G version — hardware enforced):**
 - Full refresh: ~21 seconds per update
 - Minimum cycle interval: 180 seconds (Waveshare requirement — do not lower)
@@ -251,87 +252,90 @@ Credential/token files (not in repo, created on first run):
 
 ## Widget Toggles
 
-At the top of `main.py`:
+Controlled via `settings_local.toml` on Pi (not in repo):
 
-```python
-ENABLE_STRAVA = False
-ENABLE_BAMBU = False
-ENABLE_ROBOROCK = False
-ENABLE_ANTIGRAVITY = False
-ENABLE_CLAUDE = False
-ENABLE_SPOTIFY = False
+```toml
+[widgets]
+enable_strava      = false
+enable_bambu       = false
+enable_roborock    = false
+enable_antigravity = false
+enable_claude      = false
+enable_spotify     = false
 ```
 
-Disabled widgets fall back to: CPU/RAM load or BTC/ETH crypto prices.
+Disabled widgets show empty col2 space. Col1 always shows weather.
 
 ## Font Notes
 
-Fonts live in `fnt/`. The active calendar font is **AntonSC-Regular.ttf** (Anton SC from Google Fonts) — it supports full Polish diacritics (ą ę ó ś ź ż etc.). All other widgets use **Aldrich-Regular.ttc**, which does NOT support Polish diacritics.
+Fonts in `fnt/`. Active fonts:
+- `ElmsSans-Regular.ttf` — all widget text (Elms Sans weight 400, Google Fonts)
+- `Doto-Bold.ttf` — calendar band (Doto weight 700, dot-matrix style, Google Fonts)
+- `Doto-Regular.ttf` — available, not active
+- `AntonSC-Regular.ttf` — available, not active
+- `Aldrich-Regular.ttc` — legacy, not active
+- `Oregano-*.ttf`, `BilboSwashCaps-Regular.ttf` — available, not active
 
-Available fonts:
-- `Aldrich-Regular.ttc` — used for all widget text
-- `AntonSC-Regular.ttf` — calendar widget, Polish diacritic support confirmed
-- `Oregano-Regular.ttf`, `Oregano-Italic.ttf` — available, not currently used
-- `BilboSwashCaps-Regular.ttf` — available, not currently used
-- `advanced_led_board-7.ttc`, `Font.ttc` — legacy, retained
-
-**To add a Google Font:** fetch the CSS from `fonts.googleapis.com`, extract the `.ttf` URL, `curl` it into `fnt/`, verify Polish chars render (use the PIL test snippet below), then load via `ImageFont.truetype`.
+**To add Google Font:** fetch CSS from `fonts.googleapis.com`, extract `.ttf` URL, `curl` into `fnt/`, load via `ImageFont.truetype`.
 
 ```python
-# Verify font supports Polish chars before using
+# Verify font renders before using
 from PIL import ImageFont, Image, ImageDraw
 f = ImageFont.truetype('fnt/SomeFont.ttf', 40)
 img = Image.new('RGB', (800, 60), 'white')
 draw = ImageDraw.Draw(img)
 draw.text((0, 5), 'Październik Środa Poniedziałek', font=f, fill='black')
-bb = draw.textbbox((0,0), 'test', font=f)
-print('OK')  # no exception = font loaded and rendered
+print('OK')
 ```
 
 ## Configuration
 
-At the top of `main.py`:
+All config in `settings_local.toml` on Pi (not in repo, not committed):
 
-```python
-LOCATION_LAT = 49.6790190   # Mecina, Poland — Open-Meteo weather + AQI
-LOCATION_LON = 20.5495183
+```toml
+[location]
+lat = 49.6790190   # Mecina, Poland
+lon = 20.5495183
 
-PRINTER_CONF = {'IP': ..., 'SERIAL': ..., 'ACCESS_CODE': ...}
-ROBOROCK_CONF = {'EMAIL': ...}
-LASTFM_CONF = {'API_KEY': ..., 'USERNAME': ...}
+[display]
+language = "pl"    # "en" or "pl"
+
+[weather]
+forecast_days = 5  # 5 or 7
 ```
+
+Location controls Open-Meteo weather API. Wrong coords → wrong weather data.
 
 ## Layout
 
-Display is 1360×480. `render_screen()` in `main.py` divides it into three equal columns (`col_w = 1360 // 3 = 453px`) with a top calendar band spanning col1+col2.
+Display 1360×480. `render_screen()` divides into three equal columns (`col_w = 453px`). Calendar band spans col1+col2 top.
 
 ```
 y=0  ┌──────────────────────────────────────────┬──────────────┐
-     │  Calendar (single line, Anton SC)         │              │
+     │  Calendar (single line, Doto Bold)        │              │
 y=65 ├──────────────────────────────────────────┤   col3       │
-     │  col1 (Widgets)   │  col2 (Weather)       │  (Claude /   │
+     │  col1 (Weather)   │  col2 (Widgets)       │  (Claude /   │
      │                   │                       │  Spotify /   │
-     │  Strava (opt)     │  Temp + icon + UV     │  Progress /  │
-y=165├───────────────────┤  (y=65–205)           │  Gmail)      │
-     │  Bambu 3D printer │                       │              │
-     │  (y=80 or 185)    │  Wind + AQI           │              │
-     │                   │  (y=205–365)          │              │
-y=320├───────────────────┼───────────────────────┤              │
-     │  Roborock /       │  5-day forecast       │              │
-     │  Antigravity /    │  (y=375–469)          │              │
-     │  Ping / SysLoad   │                       │              │
+     │  Temp + icon + UV │  Strava (opt)         │  Progress /  │
+     │  Humidity, Press  │  Bambu (opt)          │  Gmail)      │
+     │  (y=65–200)       │                       │              │
+y=210├───────────────────┤  ─────────────────    │              │
+     │  5-day forecast   │  Roborock /           │              │
+     │  (y=220–480)      │  Antigravity (opt)    │              │
+     │                   │                       │              │
 y=470└───────────────────┴───────────────────────┴──────────────┘
 ```
 
 **Key constants:**
-- `y_cal_div = 65` — bottom of calendar band / top of col1+col2 content
-- `C2 = 45` — vertical offset applied to all col2 y-coordinates (col2 shifted down to make room for calendar band)
+- `y_cal_div = 65` — bottom of calendar band / top of col content
 - `col1_x = 20` — left margin
 - `col2_x = col_w + 20` — col2 left edge
 - `col3_x = col_w * 2 + 30` — col3 left edge
-- Forecast `icon_sz` capped at 50 (not 60) to prevent bottom overflow after C2 shift
+- Col1 separator at y=210 (between current weather and forecast)
+- Col2 separators at y=165 (after Strava) and y=320 (before Roborock/Antigravity)
+- Forecast `f_y = 220`, `icon_sz` capped at 50
 
-**i18n:** `lang/pl.toml` and `lang/en.toml`. All Polish strings use full diacritics. `weekdays_full` key holds unabbreviated weekday names used by the calendar.
+**i18n:** `lang/pl.toml` and `lang/en.toml`. All Polish strings use full diacritics. `weekdays_full` key holds unabbreviated weekday names used by calendar.
 
 ## Pi Zero Constraints
 

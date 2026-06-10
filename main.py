@@ -1230,7 +1230,7 @@ def main():
                 logging.error(f"Unexpected error in main: {e}")
 
             elapsed = time.time() - start_time
-            sleep_time = max(0, 180 - elapsed)
+            sleep_time = max(0, 60 - elapsed)
             time.sleep(sleep_time)
 
     except KeyboardInterrupt:

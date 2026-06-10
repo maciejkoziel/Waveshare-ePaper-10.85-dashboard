@@ -267,6 +267,16 @@ def get_data_fingerprint(ds):
 
 
 # --- HELPERS ---
+def fetch_with_retry(url, retries=3, delay=5):
+    for attempt in range(retries):
+        data = net.get_json(url)
+        if data:
+            return data
+        if attempt < retries - 1:
+            time.sleep(delay)
+    return None
+
+
 def ping_printer(ip):
     try:
         result = subprocess.run(
@@ -594,7 +604,7 @@ def update_data_thread():
 
         if now - data_store.last_update['weather'] > 600:
             weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days={FORECAST_DAYS}"
-            w_data = net.get_json(weather_url)
+            w_data = fetch_with_retry(weather_url)
             if w_data:
                 with data_store.lock:
                     data_store.weather = w_data

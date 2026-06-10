@@ -595,9 +595,10 @@ def update_data_thread():
         if now - data_store.last_update['weather'] > 600:
             weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days={FORECAST_DAYS}"
             w_data = net.get_json(weather_url)
-            with data_store.lock:
-                if w_data: data_store.weather = w_data
-            data_store.last_update['weather'] = now
+            if w_data:
+                with data_store.lock:
+                    data_store.weather = w_data
+                data_store.last_update['weather'] = now
 
         if ENABLE_STRAVA:
             if now - data_store.last_update['strava'] > 900:

@@ -12,8 +12,6 @@ import socket
 import resource
 import signal
 import json
-import asyncio
-import pickle
 import subprocess
 import math
 import calendar
@@ -51,7 +49,7 @@ try:
     _w = _cfg.get('widgets', {})
     ENABLE_STRAVA      = _w.get('enable_strava', False)
     ENABLE_BAMBU       = _w.get('enable_bambu', False)
-    ENABLE_ROBOROCK    = _w.get('enable_roborock', False)
+    ENABLE_CALENDAR    = _w.get('enable_calendar', False)
     ENABLE_ANTIGRAVITY = _w.get('enable_antigravity', False)
     ENABLE_CLAUDE      = _w.get('enable_claude', False)
     ENABLE_SPOTIFY     = _w.get('enable_spotify', False)
@@ -60,7 +58,6 @@ try:
     LOCATION_LON = _loc.get('lon', 20.4934273)
     _p = _cfg.get('printer', {})
     PRINTER_CONF = {'IP': _p.get('ip', ''), 'SERIAL': _p.get('serial', ''), 'ACCESS_CODE': _p.get('access_code', '')}
-    ROBOROCK_CONF = {'EMAIL': _cfg.get('roborock', {}).get('email', '')}
     _lfm = _cfg.get('lastfm', {})
     LASTFM_CONF = {'API_KEY': _lfm.get('api_key', ''), 'USERNAME': _lfm.get('username', '')}
     LANGUAGE = _cfg.get('display', {}).get('language', 'en')
@@ -68,14 +65,13 @@ try:
 except FileNotFoundError:
     ENABLE_STRAVA = False
     ENABLE_BAMBU = False
-    ENABLE_ROBOROCK = False
+    ENABLE_CALENDAR = False
     ENABLE_ANTIGRAVITY = False
     ENABLE_CLAUDE = False
     ENABLE_SPOTIFY = False
     LOCATION_LAT = 49.6790190
     LOCATION_LON = 20.5495183
     PRINTER_CONF = {'IP': '', 'SERIAL': '', 'ACCESS_CODE': ''}
-    ROBOROCK_CONF = {'EMAIL': ''}
     LASTFM_CONF = {'API_KEY': '', 'USERNAME': ''}
     LANGUAGE = 'en'
     FORECAST_DAYS = 5
@@ -109,9 +105,10 @@ STRAVA_CONF = {
 
 # --- FILES & SCOPES ---
 GMAIL_TOKEN_PATH = os.path.join(BASE_DIR, 'token.json')
-ROBOROCK_TOKEN_FILE = os.path.join(BASE_DIR, 'roborock_session.pkl')
-ROBOROCK_STATS_FILE = os.path.join(BASE_DIR, 'roborock_stats.json')
-GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+GOOGLE_SCOPES = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/calendar.readonly',
+]
 
 if os.path.exists(LIB_DIR):
     sys.path.append(LIB_DIR)
@@ -122,16 +119,12 @@ if os.path.exists(LIB_DIR):
 try:
     import epd10in85g
     import bambulabs_api as bl
-    from roborock.web_api import RoborockApiClient
-    from roborock.devices.device_manager import create_device_manager, UserParams
 except ImportError:
     pass
 
 # --- LOGGING ---
 logging.getLogger("bambulabs_api").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
-logging.getLogger("roborock").setLevel(logging.CRITICAL)
-logging.getLogger("aiomqtt").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -228,10 +221,7 @@ class DataStore:
         self.spotify = {'status': 'PAUSED', 'text': '', 'cover': None}
         self.claude = {'error': False, 'five_hour': {}, 'seven_day': {}}
         self.antigravity = {'error': False, 'models': []}
-        self.roborock = {
-            'status': 'OFFLINE', 'battery': 0, 'is_cleaning': False,
-            'current_area': 0.0, 'ref_area': 0.0, 'pct': 0.0, 'last_date': '-'
-        }
+        self.calendar_events = []
         self.sysload = {'cpu': 0, 'ram_free': 0, 'history': deque(maxlen=30)}
         self.crypto = {'btc': 0, 'eth': 0, 'btc_hist': [], 'eth_hist': []}
         self.ping = {'current': 0, 'history': deque(maxlen=50)}
@@ -239,7 +229,7 @@ class DataStore:
         self.last_update = {
             'weather': 0, 'strava': 0, 'printer': 0, 'gmail': 0,
             'spotify': 0, 'crypto': 0, 'sysload': 0, 'ping': 0,
-            'claude': 0, 'antigravity': 0
+            'claude': 0, 'antigravity': 0, 'calendar': 0,
         }
         self.data_changed = threading.Event()
         self.last_fingerprint = None
@@ -255,9 +245,7 @@ def get_data_fingerprint(ds):
             ds.weather.get('current', {}).get('weather_code'),
             ds.gmail_unread,
             ds.printer.get('status'),
-            ds.roborock.get('status'),
-            ds.roborock.get('battery'),
-            ds.roborock.get('is_cleaning'),
+            str(ds.calendar_events),
             ds.spotify.get('status'),
             ds.spotify.get('text'),
             ds.claude.get('five_hour', {}).get('utilization'),
@@ -419,6 +407,40 @@ def auth_strava():
         ENABLE_STRAVA = False
 
 
+def auth_google():
+    if os.path.exists(GMAIL_TOKEN_PATH):
+        try:
+            creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GOOGLE_SCOPES)
+            if creds.valid:
+                return
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                with open(GMAIL_TOKEN_PATH, 'w') as f: f.write(creds.to_json())
+                return
+        except Exception:
+            pass
+
+    if not os.path.exists(os.path.join(BASE_DIR, 'credentials.json')):
+        print("Google credentials.json not found — Gmail and Calendar disabled.")
+        return
+
+    try:
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        flow = InstalledAppFlow.from_client_secrets_file(
+            os.path.join(BASE_DIR, 'credentials.json'), GOOGLE_SCOPES)
+        flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
+        auth_url, _ = flow.authorization_url(prompt='consent')
+        print("\n--- GOOGLE AUTHORIZATION REQUIRED ---")
+        print(f"Open this URL in your browser:\n\n{auth_url}\n")
+        code = input("Paste the authorization code here: ").strip()
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+        with open(GMAIL_TOKEN_PATH, 'w') as f: f.write(creds.to_json())
+        print("Google Authorization Successful!\n")
+    except Exception as e:
+        print(f"Google auth failed: {e}")
+
+
 def fetch_strava_data():
     if not os.path.exists(STRAVA_CONF['TOKEN_FILE']): return None
     with open(STRAVA_CONF['TOKEN_FILE'], 'r') as f:
@@ -493,98 +515,6 @@ def fetch_strava_data():
     }
 
 
-def auth_roborock(email):
-    global ENABLE_ROBOROCK
-    if not ENABLE_ROBOROCK: return None
-
-    if os.path.exists(ROBOROCK_TOKEN_FILE):
-        try:
-            with open(ROBOROCK_TOKEN_FILE, "rb") as f:
-                return pickle.load(f)
-        except:
-            pass
-
-    print("\n--- ROBOROCK AUTHORIZATION REQUIRED ---")
-
-    async def _do_auth():
-        web_api = RoborockApiClient(username=email)
-        await web_api.request_code()
-        code = input(f"Enter 6-digit Roborock auth code sent to {email} (or press Enter to disable): ").strip()
-        if not code: return None
-        user_data = await web_api.code_login(code)
-        with open(ROBOROCK_TOKEN_FILE, "wb") as f: pickle.dump(user_data, f)
-        print("Roborock Authorization Successful!\n")
-        return user_data
-
-    if sys.platform == "win32": asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    try:
-        user_data = asyncio.run(_do_auth())
-        if not user_data:
-            print("Roborock is disabled. Fallback widget (Ping) will be used.\n")
-            ENABLE_ROBOROCK = False
-        return user_data
-    except Exception as e:
-        print(f"Failed to auth Roborock: {e}")
-        ENABLE_ROBOROCK = False
-        return None
-
-
-def roborock_update_thread(user_data, email):
-    if not ENABLE_ROBOROCK or not user_data: return
-
-    async def _loop():
-        ref_area, last_date = 0.0, "-"
-        if os.path.exists(ROBOROCK_STATS_FILE):
-            try:
-                with open(ROBOROCK_STATS_FILE, "r") as f:
-                    stats = json.load(f)
-                    ref_area, last_date = stats.get("ref_area", 0.0), stats.get("last_date", "-")
-            except:
-                pass
-
-        user_params = UserParams(username=email, user_data=user_data)
-        device_manager = await create_device_manager(user_params)
-
-        short_states = {
-            5: "Clean", 6: "Return", 8: "Charge", 10: "Pause",
-            17: "Spot", 18: "Room", 22: "Empty", 23: "Wash",
-            26: "ToWash", 29: "Map"
-        }
-
-        while True:
-            try:
-                devices = await device_manager.get_devices()
-                if devices and devices[0].v1_properties:
-                    device = devices[0]
-                    status_trait = device.v1_properties.status
-                    await status_trait.refresh()
-                    current_area = (status_trait.clean_area / 1000000) if status_trait.clean_area else 0
-
-                    is_cleaning = status_trait.state in [5, 6, 10, 17, 18, 22, 23, 26, 29]
-                    status_str = short_states.get(status_trait.state, f"S:{status_trait.state}")
-
-                    if not is_cleaning and current_area > 0 and current_area != ref_area:
-                        ref_area = current_area
-                        last_date = datetime.now().strftime("%d %b %H:%M")
-                        with open(ROBOROCK_STATS_FILE, "w") as f: json.dump(
-                            {"ref_area": ref_area, "last_date": last_date}, f)
-
-                    pct = (current_area / ref_area) * 100 if is_cleaning and ref_area > 0 else 0.0
-
-                    with data_store.lock:
-                        data_store.roborock = {
-                            'status': status_str, 'battery': status_trait.battery,
-                            'is_cleaning': is_cleaning, 'current_area': current_area,
-                            'ref_area': ref_area, 'pct': pct, 'last_date': last_date
-                        }
-            except Exception as e:
-                logging.error(f"Roborock error: {e}")
-            await asyncio.sleep(60)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(_loop())
 
 
 def update_data_thread():
@@ -659,7 +589,7 @@ def update_data_thread():
             try:
                 creds = None
                 if os.path.exists(GMAIL_TOKEN_PATH):
-                    creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GMAIL_SCOPES)
+                    creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GOOGLE_SCOPES)
                     if creds and creds.expired and creds.refresh_token:
                         creds.refresh(Request())
                         with open(GMAIL_TOKEN_PATH, 'w') as t: t.write(creds.to_json())
@@ -670,6 +600,39 @@ def update_data_thread():
             except:
                 pass
             data_store.last_update['gmail'] = now
+
+        if ENABLE_CALENDAR and now - data_store.last_update['calendar'] > 300:
+            try:
+                creds = None
+                if os.path.exists(GMAIL_TOKEN_PATH):
+                    creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GOOGLE_SCOPES)
+                    if creds and creds.expired and creds.refresh_token:
+                        creds.refresh(Request())
+                        with open(GMAIL_TOKEN_PATH, 'w') as t: t.write(creds.to_json())
+                if creds and creds.valid:
+                    cal_service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    result = cal_service.events().list(
+                        calendarId='primary', timeMin=now_iso,
+                        maxResults=5, singleEvents=True, orderBy='startTime'
+                    ).execute()
+                    events = []
+                    for ev in result.get('items', []):
+                        start = ev['start'].get('dateTime', ev['start'].get('date', ''))
+                        try:
+                            if 'T' in start:
+                                dt_ev = datetime.fromisoformat(start)
+                                time_str = dt_ev.strftime('%d.%m %H:%M')
+                            else:
+                                dt_ev = datetime.strptime(start, '%Y-%m-%d')
+                                time_str = dt_ev.strftime('%d.%m')
+                        except Exception:
+                            time_str = start[:10]
+                        events.append({'title': ev.get('summary', '?'), 'time': time_str})
+                    with data_store.lock: data_store.calendar_events = events
+            except Exception as e:
+                logging.error(f"Calendar error: {e}")
+            data_store.last_update['calendar'] = now
 
         # Claude Data Fetching (Run external script every 10 min)
         if ENABLE_CLAUDE and now - data_store.last_update['claude'] > 600:
@@ -816,8 +779,8 @@ def render_screen(epd, fonts):
         weather = data_store.weather.copy()
         strava = data_store.strava.copy()
         printer = data_store.printer.copy()
-        rob = data_store.roborock.copy()
         gmail_unread = data_store.gmail_unread
+        calendar_events = list(data_store.calendar_events)
         spotify = data_store.spotify.copy()
         claude = data_store.claude.copy()
         antigravity = data_store.antigravity.copy()
@@ -964,22 +927,18 @@ def render_screen(epd, fonts):
     draw.line((col2_x, 320, col_w * 2 - 20, 320), fill="black", width=2)
 
     y3 = 340
-    if ENABLE_ROBOROCK:
-        draw_icon(draw, col2_x, y3, "icon_roborock", (50, 50))
-        draw.text((col2_x + 60, y3), STRINGS.get('roborock_battery', 'Bat: {bat}% | {status}').format(bat=rob['battery'], status=rob['status']), font=fonts['28'], fill="black")
-        if rob['is_cleaning']:
-            draw.text((col2_x + 60, y3 + 35),
-                      STRINGS.get('roborock_cleaning', 'Clean: {area} m2 ({pct}%)').format(
-                          area=f"{rob['current_area']:.1f}", pct=f"{rob['pct']:.0f}"),
-                      font=fonts['24'], fill="black")
-            clamped_pct = min(rob['pct'], 100)
-            draw.rectangle((col2_x + 60, y3 + 70, col2_x + 390, y3 + 90), outline="black")
-            draw.rectangle((col2_x + 60, y3 + 70, col2_x + 60 + int(330 * (clamped_pct / 100)), y3 + 90), fill="black")
+    if ENABLE_CALENDAR:
+        draw.text((col2_x, y3), STRINGS.get('calendar_title', 'UPCOMING'), font=fonts['28'], fill="black")
+        if calendar_events:
+            for i, ev in enumerate(calendar_events[:4]):
+                ey = y3 + 35 + i * 32
+                draw.text((col2_x, ey), ev['time'], font=fonts['20'], fill="red")
+                title = ev['title']
+                if len(title) > 28:
+                    title = title[:27] + '…'
+                draw.text((col2_x + 95, ey), title, font=fonts['20'], fill="black")
         else:
-            draw.text((col2_x + 60, y3 + 35),
-                      STRINGS.get('roborock_last', 'Last: {date} | {area} m2').format(
-                          date=rob['last_date'], area=f"{rob['ref_area']:.1f}"),
-                      font=fonts['24'], fill="black")
+            draw.text((col2_x, y3 + 35), STRINGS.get('calendar_empty', 'No upcoming events'), font=fonts['20'], fill="black")
     elif ENABLE_ANTIGRAVITY:
         draw_icon(draw, col2_x, y3, "icon_cpu", (50, 50))
         draw.text((col2_x + 60, y3), STRINGS.get('antigravity_title', 'ANTIGRAVITY USAGE'), font=fonts['28'], fill="black")
@@ -1099,10 +1058,10 @@ def render_screen(epd, fonts):
 
 # --- MAIN LOOP ---
 def main():
+    auth_google()
     auth_strava()
     auth_claude()
     auth_antigravity()
-    roborock_user_data = auth_roborock(ROBOROCK_CONF['EMAIL'])
 
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.signal(signal.SIGUSR1, refresh_signal_handler)
@@ -1132,11 +1091,6 @@ def main():
         t_data = threading.Thread(target=update_data_thread)
         t_data.daemon = True
         t_data.start()
-
-        if ENABLE_ROBOROCK:
-            t_robo = threading.Thread(target=roborock_update_thread, args=(roborock_user_data, ROBOROCK_CONF['EMAIL']))
-            t_robo.daemon = True
-            t_robo.start()
 
         refresh_counter = 0
         MIN_REFRESH_INTERVAL = 180

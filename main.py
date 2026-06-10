@@ -874,7 +874,7 @@ def render_screen(epd, fonts):
         bb1 = draw.textbbox((0, 0), line1, font=f1)
         h1 = bb1[3] - bb1[1]
         draw.text((col1_x, y1), line1, font=f1, fill="black")
-        draw.text((col1_x, y1 + h1 + 4), line2, font=f2, fill="black")
+        draw.text((col1_x, y1 + h1 + 14), line2, font=f2, fill="black")
 
     draw.line((col1_x, 150, col_w - 20, 150), fill="black", width=2)
 

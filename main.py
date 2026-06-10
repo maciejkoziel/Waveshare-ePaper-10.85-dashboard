@@ -96,9 +96,12 @@ GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 if os.path.exists(LIB_DIR):
     sys.path.append(LIB_DIR)
+    epd_dir = os.path.join(LIB_DIR, 'waveshare_epd')
+    if os.path.exists(epd_dir):
+        sys.path.insert(0, epd_dir)
 
 try:
-    from waveshare_epd import epd10in85g
+    import epd10in85g
     import bambulabs_api as bl
     from roborock.web_api import RoborockApiClient
     from roborock.devices.device_manager import create_device_manager, UserParams
@@ -1231,7 +1234,7 @@ def main():
     except KeyboardInterrupt:
         try:
             signal.alarm(0)
-            epd10in85g.epdconfig.module_exit(cleanup=True)
+            epd10in85g.epdconfig.module_exit(cleanup=True)  # epdconfig_g imported as epdconfig in driver
         except:
             pass
         exit()

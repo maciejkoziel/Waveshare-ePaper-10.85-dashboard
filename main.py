@@ -822,17 +822,40 @@ def render_screen(epd, fonts):
     dt = datetime.now()
     months = STRINGS.get('months', ['January','February','March','April','May','June','July','August','September','October','November','December'])
     weekdays_list = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
-    date_str = f"{dt.day:02d} {months[dt.month - 1]} {dt.year}"
-    day_str = weekdays_list[dt.weekday()]
-
     col_w = total_width // 3
 
-    # --- COLUMN 1 (Widgets) ---
+    # --- CALENDAR (spans col1 + col2) ---
     col1_x = 20
+    y_cal_div = 65
 
-    # Widget 1: Strava or Calendar
-    y1 = 20
+    weekdays_full = STRINGS.get('weekdays_full', ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
+    cal_line = f"{dt.year} - {months[dt.month - 1]}  ·  {dt.day} - {weekdays_full[dt.weekday()]}"
+    cal_max_w = col_w * 2 - col1_x - 20
+    cal_max_h = y_cal_div - 20
+    def fit_cal_font(text):
+        size = cal_max_h
+        while size > 8:
+            f = fonts['cal_font_cache'].get(size) or ImageFont.truetype(
+                os.path.join(FONT_DIR, 'AntonSC-Regular.ttf'), size)
+            fonts['cal_font_cache'][size] = f
+            bb = draw.textbbox((0, 0), text, font=f)
+            if (bb[2] - bb[0]) <= cal_max_w and (bb[3] - bb[1]) <= cal_max_h:
+                return f
+            size -= 1
+        return fonts['cal_font_cache'][8]
+    f_cal = fit_cal_font(cal_line)
+    bb_cal = draw.textbbox((0, 0), cal_line, font=f_cal)
+    cal_text_h = bb_cal[3] - bb_cal[1]
+    cal_text_y = 10 + (y_cal_div - 10 - cal_text_h) // 2
+    draw.text((col1_x, cal_text_y), cal_line, font=f_cal, fill="black")
+
+    draw.line((col1_x, y_cal_div, col_w * 2 - 20, y_cal_div), fill="black", width=2)
+
+    # --- COLUMN 1 (Widgets) ---
+
+    # Widget 1: Strava (if enabled, below calendar)
     if ENABLE_STRAVA:
+        y1 = y_cal_div + 15
         draw_icon(draw, col1_x, y1, "icon_strava", (60, 60))
         draw.text((col1_x + 70, y1), STRINGS.get('strava_title', 'STRAVA STATS'), font=fonts['28'], fill="black")
 
@@ -852,34 +875,12 @@ def render_screen(epd, fonts):
         draw_icon(draw, col1_x + 220, y1 + 85, "icon_hike", (30, 30))
         draw.text((col1_x + 255, y1 + 90), f"{strava.get('hike_total', 0)} km", font=fonts['20'], fill="black")
 
+        draw.line((col1_x, 165, col_w - 20, 165), fill="black", width=2)
+        y2 = 185
     else:
-        cal_max_w = col_w - col1_x - 20
-        cal_max_h = (165 - y1) // 2 - 4
-        weekdays_full = STRINGS.get('weekdays_full', ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
-        line1 = f"{dt.year} - {months[dt.month - 1]}"
-        line2 = f"{dt.day} - {weekdays_full[dt.weekday()]}"
-        def fit_cal_font(text):
-            size = cal_max_h
-            while size > 8:
-                f = fonts['cal_font_cache'].get(size) or ImageFont.truetype(
-                    os.path.join(FONT_DIR, 'AntonSC-Regular.ttf'), size)
-                fonts['cal_font_cache'][size] = f
-                bb = draw.textbbox((0, 0), text, font=f)
-                if (bb[2] - bb[0]) <= cal_max_w and (bb[3] - bb[1]) <= cal_max_h:
-                    return f
-                size -= 1
-            return fonts['cal_font_cache'][8]
-        f1 = fit_cal_font(line1)
-        f2 = fit_cal_font(line2)
-        bb1 = draw.textbbox((0, 0), line1, font=f1)
-        h1 = bb1[3] - bb1[1]
-        draw.text((col1_x, y1), line1, font=f1, fill="black")
-        draw.text((col1_x, y1 + h1 + 18), line2, font=f2, fill="black")
-
-    draw.line((col1_x, 165, col_w - 20, 165), fill="black", width=2)
+        y2 = y_cal_div + 15
 
     # Widget 2: Bambu
-    y2 = 185
     if ENABLE_BAMBU:
         p_status = str(printer.get('status', 'OFFLINE')).upper()
         draw_icon(draw, col1_x, y2, "icon_3d", (60, 60))
@@ -938,10 +939,11 @@ def render_screen(epd, fonts):
                     if fill_w > 0: draw.rectangle((bx + 2, y_off + 27, bx + 2 + fill_w, y_off + 25 + bh - 2), fill="black")
                     
                     y_off += 50
-    draw.line((col_w, 10, col_w, 470), fill="black", width=2)
+    draw.line((col_w, y_cal_div, col_w, 470), fill="black", width=2)
 
     # --- COLUMN 2 (Weather) ---
     col2_x = col_w + 20
+    C2 = 45  # vertical offset applied to all col2 content
 
     if 'current' in weather:
         cur = weather['current']
@@ -956,10 +958,10 @@ def render_screen(epd, fonts):
 
         temp_rounded = math.floor(temp + 0.5)
 
-        draw_icon(draw, col2_x, 20, get_weather_icon(w_code, is_day), (90, 90))
-        draw.text((col2_x + 100, 10), f"{temp_rounded}°C", font=fonts['80'], fill="black")
+        draw_icon(draw, col2_x, 20 + C2, get_weather_icon(w_code, is_day), (90, 90))
+        draw.text((col2_x + 100, 10 + C2), f"{temp_rounded}°C", font=fonts['80'], fill="black")
 
-        uv_x, uv_y = col2_x + 320, 25
+        uv_x, uv_y = col2_x + 320, 25 + C2
         uv_rounded = math.floor(uv_index + 0.5)
         draw.text((uv_x, uv_y), "UV", font=fonts['28'], fill="black")
         uv_val_str = str(uv_rounded)
@@ -969,7 +971,7 @@ def render_screen(epd, fonts):
         except AttributeError:
             tw, th = draw.textsize(uv_val_str, font=fonts['60'])
 
-        uv_val_x, uv_val_y = uv_x + 45, 5
+        uv_val_x, uv_val_y = uv_x + 45, 5 + C2
         if uv_rounded >= 6:
             pad = 5
             draw.rectangle((uv_val_x - pad, uv_val_y - pad + 10, uv_val_x + tw + pad, uv_val_y + th + pad), fill="black")
@@ -977,12 +979,12 @@ def render_screen(epd, fonts):
         else:
             draw.text((uv_val_x, uv_val_y), uv_val_str, font=fonts['60'], fill="black")
 
-        draw.text((col2_x + 100, 95), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
-        draw.text((col2_x + 100, 120), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
+        draw.text((col2_x + 100, 95 + C2), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
+        draw.text((col2_x + 100, 120 + C2), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
 
-        draw.line((col2_x, 140, col2_x + col_w - 40, 140), fill="black", width=2)
+        draw.line((col2_x, 140 + C2, col2_x + col_w - 40, 140 + C2), fill="black", width=2)
 
-        y_c2 = 160
+        y_c2 = 160 + C2
         draw_icon(draw, col2_x + 5, y_c2, "icon_wind", (30, 30))
 
         cx, cy, r = col2_x + 80, y_c2 + 80, 60
@@ -1040,7 +1042,7 @@ def render_screen(epd, fonts):
         else:
             draw.text((val_x, val_y), aqi_str, font=fonts['80'], fill="black")
 
-        draw.line((col2_x, 320, col2_x + col_w - 40, 320), fill="black", width=2)
+        draw.line((col2_x, 320 + C2, col2_x + col_w - 40, 320 + C2), fill="black", width=2)
 
         daily = weather.get('daily', {})
         d_times = daily.get('time', [])
@@ -1050,7 +1052,8 @@ def render_screen(epd, fonts):
 
         n_days = min(FORECAST_DAYS, len(d_times))
         slot_w = (col_w - 40) // max(n_days, 1)
-        icon_sz = min(60, slot_w - 10)
+        icon_sz = min(50, slot_w - 10)
+        f_y = 330 + C2
         for i in range(n_days):
             off_x = col2_x + (i * slot_w)
             try:
@@ -1058,12 +1061,12 @@ def render_screen(epd, fonts):
                 day_label = weekdays_list[day_dt.weekday()]
             except Exception:
                 day_label = d_times[i][-5:] if d_times[i] else ''
-            draw.text((off_x + 4, 330), day_label, font=fonts['20'], fill="black")
-            draw_icon(draw, off_x + 4, 354, get_weather_icon(d_codes[i] if i < len(d_codes) else 0, 1), (icon_sz, icon_sz))
+            draw.text((off_x + 4, f_y), day_label, font=fonts['20'], fill="black")
+            draw_icon(draw, off_x + 4, f_y + 24, get_weather_icon(d_codes[i] if i < len(d_codes) else 0, 1), (icon_sz, icon_sz))
             tmax = math.floor(d_tmax[i] + 0.5) if i < len(d_tmax) else 0
             tmin = math.floor(d_tmin[i] + 0.5) if i < len(d_tmin) else 0
-            draw.text((off_x + 4, 354 + icon_sz + 4), f"{tmax}°", font=fonts['20'], fill="black")
-            draw.text((off_x + 4, 354 + icon_sz + 22), f"{tmin}°", font=fonts['20'], fill="black")
+            draw.text((off_x + 4, f_y + 24 + icon_sz + 2), f"{tmax}°", font=fonts['20'], fill="black")
+            draw.text((off_x + 4, f_y + 24 + icon_sz + 20), f"{tmin}°", font=fonts['20'], fill="black")
 
     draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)
 

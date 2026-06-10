@@ -537,7 +537,7 @@ def update_data_thread():
         now = time.time()
 
         if now - data_store.last_update['weather'] > 600:
-            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days={FORECAST_DAYS}"
+            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset&timezone=auto&forecast_days={FORECAST_DAYS}"
             w_data = fetch_with_retry(weather_url)
             if w_data:
                 with data_store.lock:
@@ -831,6 +831,12 @@ def get_weather_icon(code, is_day=1):
     return "icon_sun"
 
 
+def moon_phase_index(dt):
+    known_new = datetime(2000, 1, 6, 18, 14)
+    days = (dt - known_new).total_seconds() / 86400
+    return int((days % 29.53059) / 29.53059 * 8) % 8
+
+
 def render_screen(epd, fonts):
     total_width = epd.width * 2
     Himage = Image.new('RGB', (total_width, epd.height), 'white')
@@ -918,18 +924,35 @@ def render_screen(epd, fonts):
         draw.text((col1_x + 100, y_cal_div + 90), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
         draw.text((col1_x + 100, y_cal_div + 115), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
 
-        draw.line((col1_x, 210, col_w - 20, 210), fill="black", width=2)
-
         daily = weather.get('daily', {})
         d_times = daily.get('time', [])
         d_tmax = daily.get('temperature_2m_max', [])
         d_tmin = daily.get('temperature_2m_min', [])
         d_codes = daily.get('weather_code', [])
 
+        d_sunrise = daily.get('sunrise', [])
+        d_sunset = daily.get('sunset', [])
+        sr_time = d_sunrise[0][11:16] if d_sunrise else '--:--'
+        ss_time = d_sunset[0][11:16] if d_sunset else '--:--'
+
+        sun_y = y_cal_div + 138
+        draw_icon(draw, col1_x, sun_y, "icon_sun", (20, 20))
+        draw.text((col1_x + 24, sun_y), sr_time, font=fonts['20'], fill="black")
+        draw_icon(draw, col1_x + 80, sun_y, "icon_moon", (20, 20))
+        draw.text((col1_x + 104, sun_y), ss_time, font=fonts['20'], fill="black")
+
+        moon_names = STRINGS.get('moon_phases', [''] * 8)
+        moon_name = moon_names[moon_phase_index(datetime.now())] if len(moon_names) >= 8 else ''
+        moon_y = y_cal_div + 160
+        draw_icon(draw, col1_x, moon_y, "icon_night", (20, 20))
+        draw.text((col1_x + 24, moon_y), moon_name, font=fonts['20'], fill="black")
+
+        draw.line((col1_x, 242, col_w - 20, 242), fill="black", width=2)
+
         n_days = min(FORECAST_DAYS, len(d_times))
         slot_w = (col_w - 40) // max(n_days, 1)
         icon_sz = min(50, slot_w - 10)
-        f_y = 220
+        f_y = 252
         for i in range(n_days):
             off_x = col1_x + (i * slot_w)
             try:

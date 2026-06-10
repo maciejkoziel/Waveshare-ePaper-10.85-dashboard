@@ -256,10 +256,6 @@ def get_data_fingerprint(ds):
             ds.weather.get('current', {}).get('weather_code'),
             ds.aqi,
             ds.gmail_unread,
-            ds.crypto['btc'],
-            ds.crypto['eth'],
-            int(ds.ping['current'] / 5) * 5,
-            ds.sysload['cpu'] // 10,
             ds.printer.get('status'),
             ds.roborock.get('status'),
             ds.roborock.get('battery'),
@@ -614,21 +610,6 @@ def update_data_thread():
                 if s_data:
                     with data_store.lock: data_store.strava = s_data
                 data_store.last_update['strava'] = now
-        else:
-            if now - data_store.last_update['sysload'] > 30:
-                try:
-                    with open('/proc/loadavg', 'r') as f:
-                        cpu = float(f.read().split()[0]) * 10
-                    with open('/proc/meminfo', 'r') as f:
-                        lines = f.readlines()
-                        free = int(lines[1].split()[1]) // 1024
-                    with data_store.lock:
-                        data_store.sysload['cpu'] = min(int(cpu), 100)
-                        data_store.sysload['ram_free'] = free
-                        data_store.sysload['history'].append(min(int(cpu), 100))
-                except:
-                    pass
-                data_store.last_update['sysload'] = now
 
         if ENABLE_BAMBU:
             update_interval = 5 if is_connected else 15
@@ -668,37 +649,6 @@ def update_data_thread():
                     with data_store.lock:
                         data_store.printer['status'] = 'OFFLINE'
                 data_store.last_update['printer'] = now
-        else:
-            if now - data_store.last_update['crypto'] > 600:
-                btc_url = f"{API_ENDPOINTS['btc']}?vs_currency=usd&days=7"
-                eth_url = f"{API_ENDPOINTS['eth']}?vs_currency=usd&days=7"
-                btc_data = net.get_json(btc_url)
-                eth_data = net.get_json(eth_url)
-                with data_store.lock:
-                    if btc_data:
-                        prices = [p[1] for p in btc_data.get('prices', [])]
-                        if prices:
-                            data_store.crypto['btc'] = int(prices[-1])
-                            data_store.crypto['btc_hist'] = prices[::len(prices) // 50][:50]
-                    if eth_data:
-                        prices = [p[1] for p in eth_data.get('prices', [])]
-                        if prices:
-                            data_store.crypto['eth'] = int(prices[-1])
-                            data_store.crypto['eth_hist'] = prices[::len(prices) // 50][:50]
-                data_store.last_update['crypto'] = now
-
-        if not ENABLE_ROBOROCK and not ENABLE_ANTIGRAVITY:
-            if now - data_store.last_update['ping'] > 20:
-                try:
-                    out = subprocess.check_output(['ping', '-c', '1', '-W', '1', '8.8.8.8']).decode('utf-8')
-                    ms = float(out.split('time=')[1].split(' ms')[0])
-                except:
-                    ms = 0
-                with data_store.lock:
-                    data_store.ping['current'] = int(ms)
-                    data_store.ping['history'].append(int(ms))
-                data_store.last_update['ping'] = now
-
         if now - data_store.last_update['gmail'] > 300:
             try:
                 creds = None
@@ -866,28 +816,30 @@ def render_screen(epd, fonts):
         spotify = data_store.spotify.copy()
         claude = data_store.claude.copy()
         antigravity = data_store.antigravity.copy()
-        sysload = data_store.sysload.copy()
-        crypto = data_store.crypto.copy()
-        ping = data_store.ping.copy()
     finally:
         data_store.lock.release()
+
+    dt = datetime.now()
+    months = STRINGS.get('months', ['January','February','March','April','May','June','July','August','September','October','November','December'])
+    weekdays_list = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
+    date_str = f"{dt.day:02d} {months[dt.month - 1]} {dt.year}"
+    day_str = weekdays_list[dt.weekday()]
 
     col_w = total_width // 3
 
     # --- COLUMN 1 (Widgets) ---
     col1_x = 20
 
-    # Widget 1: Strava or SysLoad
+    # Widget 1: Strava or Calendar
     y1 = 20
     if ENABLE_STRAVA:
         draw_icon(draw, col1_x, y1, "icon_strava", (60, 60))
         draw.text((col1_x + 70, y1), STRINGS.get('strava_title', 'STRAVA STATS'), font=fonts['28'], fill="black")
 
-        now_y = datetime.now().year
         draw.text((col1_x + 70, y1 + 35),
                   STRINGS.get('strava_year_stats', '{year}: {dist} km | {prev_year}: {prev_dist} km').format(
-                      year=now_y, dist=strava.get('distance_curr', 0),
-                      prev_year=now_y - 1, prev_dist=strava.get('distance_prev', 0)),
+                      year=dt.year, dist=strava.get('distance_curr', 0),
+                      prev_year=dt.year - 1, prev_dist=strava.get('distance_prev', 0)),
                   font=fonts['20'], fill="black")
         draw.text((col1_x + 70, y1 + 60),
                   STRINGS.get('strava_total', 'Total: {dist} km | {rides} acts').format(
@@ -901,15 +853,12 @@ def render_screen(epd, fonts):
         draw.text((col1_x + 255, y1 + 90), f"{strava.get('hike_total', 0)} km", font=fonts['20'], fill="black")
 
     else:
-        draw_icon(draw, col1_x, y1, "icon_cpu", (50, 50))
-        draw.text((col1_x + 60, y1), STRINGS.get('sysload_title', 'SYSTEM LOAD: {cpu}%').format(cpu=sysload['cpu']), font=fonts['28'], fill="black")
-        draw.text((col1_x + 60, y1 + 35), STRINGS.get('ram_free', 'RAM Free: {mb} MB').format(mb=sysload['ram_free']), font=fonts['20'], fill="black")
-        draw_sparkline(draw, col1_x + 60, y1 + 60, list(sysload['history']), max_items=30, width=350, height=40,
-                       style="bar")
+        draw.text((col1_x, y1), date_str, font=fonts['40'], fill="black")
+        draw.text((col1_x, y1 + 55), day_str, font=fonts['40'], fill="black")
 
     draw.line((col1_x, 150, col_w - 20, 150), fill="black", width=2)
 
-    # Widget 2: Bambu or Crypto
+    # Widget 2: Bambu
     y2 = 170
     if ENABLE_BAMBU:
         p_status = str(printer.get('status', 'OFFLINE')).upper()
@@ -922,14 +871,6 @@ def render_screen(epd, fonts):
             draw.text((col1_x + 70, y2 + 70),
                       f"{percent}% | Rem: {printer.get('remaining_time', '0')}m | {printer.get('layers', '0/0')} L",
                       font=fonts['20'], fill="black")
-    else:
-        draw_icon(draw, col1_x, y2, "icon_btc", (50, 50))
-        draw.text((col1_x + 60, y2), f"BTC: ${crypto['btc']}", font=fonts['28'], fill="black")
-        draw_sparkline(draw, col1_x + 60, y2 + 35, crypto['btc_hist'], max_items=50, width=350, height=35, style="bar")
-
-        draw_icon(draw, col1_x, y2 + 80, "icon_eth", (50, 50))
-        draw.text((col1_x + 60, y2 + 80), f"ETH: ${crypto['eth']}", font=fonts['28'], fill="black")
-        draw_sparkline(draw, col1_x + 60, y2 + 115, crypto['eth_hist'], max_items=50, width=350, height=35, style="bar")
 
     draw.line((col1_x, 320, col_w - 20, 320), fill="black", width=2)
 
@@ -977,11 +918,6 @@ def render_screen(epd, fonts):
                     if fill_w > 0: draw.rectangle((bx + 2, y_off + 27, bx + 2 + fill_w, y_off + 25 + bh - 2), fill="black")
                     
                     y_off += 50
-    else:
-        draw_icon(draw, col1_x, y3, "icon_wifi", (50, 50))
-        draw.text((col1_x + 60, y3), STRINGS.get('internet_quality', 'Internet Quality: {ms} ms').format(ms=ping['current']), font=fonts['28'], fill="black")
-        draw_sparkline(draw, col1_x, y3 + 60, list(ping['history']), max_items=50, width=400, height=40, style="bar")
-
     draw.line((col_w, 10, col_w, 470), fill="black", width=2)
 
     # --- COLUMN 2 (Weather) ---
@@ -1095,13 +1031,11 @@ def render_screen(epd, fonts):
         n_days = min(FORECAST_DAYS, len(d_times))
         slot_w = (col_w - 40) // max(n_days, 1)
         icon_sz = min(60, slot_w - 10)
-        weekdays = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
-
         for i in range(n_days):
             off_x = col2_x + (i * slot_w)
             try:
                 day_dt = datetime.strptime(d_times[i], "%Y-%m-%d")
-                day_label = weekdays[day_dt.weekday()]
+                day_label = weekdays_list[day_dt.weekday()]
             except Exception:
                 day_label = d_times[i][-5:] if d_times[i] else ''
             draw.text((off_x + 4, 330), day_label, font=fonts['20'], fill="black")
@@ -1113,23 +1047,11 @@ def render_screen(epd, fonts):
 
     draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)
 
-    # --- COLUMN 3 (Time, Claude/Spotify/Progress, Gmail) ---
+    # --- COLUMN 3 (Claude/Spotify/Progress, Gmail) ---
     col3_x = col_w * 2 + 30
-    dt = datetime.now()
 
-    # 1. Time & Date
-    months = STRINGS.get('months', ['January','February','March','April','May','June','July','August','September','October','November','December'])
-    weekdays = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
-    date_str = f"{dt.day:02d} {months[dt.month - 1]} {dt.year}"
-    day_str = weekdays[dt.weekday()]
-
-    draw.text((col3_x, 10), date_str, font=fonts['32'], fill="black")
-    draw.text((col3_x + 340, 10), day_str, font=fonts['32'], fill="black")
-
-    draw.line((col3_x, 50, total_width - 20, 50), fill="black", width=2)
-
-    # 2. Claude AI OR Spotify OR Time Progress
-    sp_y = 70
+    # 1. Claude AI OR Spotify OR Time Progress
+    sp_y = 10
     # Clear background for widget
     draw.rectangle((col3_x, sp_y, col3_x + 420, sp_y + 130), fill="white")
 
@@ -1203,10 +1125,10 @@ def render_screen(epd, fonts):
         draw_prog(75, STRINGS.get('label_month', 'MONTH'), month_pct)
         draw_prog(110, STRINGS.get('label_year', 'YEAR'), year_pct)
 
-    draw.line((col3_x, 210, total_width - 20, 210), fill="black", width=2)
+    draw.line((col3_x, 150, total_width - 20, 150), fill="black", width=2)
 
-    # 3. Gmail
-    gm_y = 230
+    # 2. Gmail
+    gm_y = 170
     draw_icon(draw, col3_x, gm_y, "icon_mail", (60, 60))
     draw.text((col3_x + 80, gm_y + 10), STRINGS.get('gmail_unread', 'Unread Inbox: {count}').format(count=gmail_unread), font=fonts['35'], fill="black")
 

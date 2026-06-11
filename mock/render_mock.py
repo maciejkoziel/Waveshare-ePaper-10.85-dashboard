@@ -185,27 +185,28 @@ def render(fs):
     draw_tri(d, sx2, 20, 13, up=False, fill=YELLOW)
     d.text((sx2 + 18, 14), ss, font=fs['body_knock'], fill='white')
 
-    # --- LEFT RAIL: NASTEPNE box ---
+    # --- LEFT RAIL: NOW box (ongoing event) ---
     bx, by, bw, bh = 10, 64, 360, 108
     d.rectangle((bx, by, bx + bw, by + bh), fill='black')
-    draw_tracked(d, (bx + 12, by + 5), 'NEXT', fs['label_knock'], YELLOW, trk)
-    cd = 'in 2 hrs'
-    d.text((bx + bw - 12 - fs['small_knock'].getlength(cd), by + 10),
-           cd, font=fs['small_knock'], fill=YELLOW)
+    draw_tracked(d, (bx + 12, by + 5), 'NOW', fs['label_knock'], YELLOW, trk)
     d.line((bx + 8, by + 34, bx + bw - 8, by + 34), fill='white', width=1)
 
-    big = '17:00'
-    time_w = int(fs['next_time'].getlength(big))
+    t_start, t_end = '15:00', '16:00'
+    time_font = fs['cal_time']
+    time_w = int(time_font.getlength(t_start))
     title_max = bw - 34 - time_w
-    lines = wrap_text('Football training', fs['body_knock'], title_max)[:2]
-    TIME_H, LINE_H, LABEL_LINE_H = 48, 28, 26
+    lines = wrap_text('Stand-up meeting', fs['body_knock'], title_max)[:2]
+    TIME_LINE_H = 30
+    time_block_h = TIME_LINE_H * 2
+    LINE_H, LABEL_LINE_H = 28, 26
     label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
-    block_h = max(TIME_H, label_h)
+    block_h = max(time_block_h, label_h)
     block_y = by + 36 + (68 - block_h) // 2
-    time_y = block_y + (block_h - TIME_H) // 2
+    time_y  = block_y + (block_h - time_block_h) // 2
     title_y = block_y + (block_h - label_h) // 2
-    d.text((bx + 12, time_y), big, font=fs['next_time'], fill=YELLOW)
-    tx = bx + 12 + time_w + 12
+    d.text((bx + 12, time_y),              t_start, font=time_font, fill=YELLOW)
+    d.text((bx + 12, time_y + TIME_LINE_H), t_end,  font=time_font, fill=YELLOW)
+    tx = bx + 12 + time_w + 10
     for i, line in enumerate(lines):
         d.text((tx, title_y + i * LINE_H), line, font=fs['body_knock'], fill=YELLOW)
 

@@ -51,8 +51,7 @@ sudo apt install python3-pip python3-pil python3-numpy git -y
 ### 2. Python Dependencies
 
 ```bash
-pip3 install --break-system-packages requests Pillow \
-  google-api-python-client google-auth-httplib2 google-auth-oauthlib
+pip3 install --break-system-packages -r requirements.txt
 ```
 
 > The G-display driver (`epd10in85g` + `epdconfig_g`) is bundled in `lib/waveshare_epd/`.
@@ -143,6 +142,21 @@ curl http://<pi-ip>:5000/message
 ```
 
 Colors: `black`, `white`, `red`, `yellow`. `ttl: 0` = persistent; each message expires independently. DELETE only removes messages sent from the caller's IP — messages from other devices are unaffected. The server automatically signals the dashboard to refresh after each change.
+
+---
+
+## Local Development (no Pi required)
+
+`mock/render_mock.py` renders a full dashboard preview as a PNG on any machine — no Pi or display hardware needed. It uses the same fonts and icons as the real dashboard.
+
+```bash
+pip3 install Pillow
+python3 mock/render_mock.py
+# Outputs: mock/dashboard_C.png (current layout, quantized to 4-color e-ink palette)
+#          mock/dashboard_C_raw.png (same, pre-quantization)
+```
+
+Open `mock/dashboard_C.png` to check layout and typography changes before deploying to the Pi.
 
 ---
 

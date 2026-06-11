@@ -14,6 +14,9 @@ roborock_stats.json
 dashboard.log
 dashboard.log.*
 
+# Runtime state
+dashboard_message.json
+
 # Python
 __pycache__/
 *.pyc

@@ -16,7 +16,7 @@ import subprocess
 import math
 import calendar
 import tomllib
-from collections import deque
+
 from datetime import datetime, timezone, timedelta, date as date_cls
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from logging.handlers import RotatingFileHandler
@@ -59,8 +59,8 @@ except FileNotFoundError:
     ENABLE_CALENDAR = False
     ENABLE_TASKS = False
     ENABLE_CLAUDE = False
-    LOCATION_LAT = 49.6790190
-    LOCATION_LON = 20.5495183
+    LOCATION_LAT = 44.8240855
+    LOCATION_LON = 20.4934273
 
     LANGUAGE = 'en'
     FORECAST_DAYS = 5
@@ -81,8 +81,7 @@ except FileNotFoundError:
 API_ENDPOINTS = {
     'weather': 'http://api.open-meteo.com/v1/forecast',
     'air_quality': 'http://air-quality-api.open-meteo.com/v1/air-quality',
-    'btc': 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart',
-    'eth': 'https://api.coingecko.com/api/v3/coins/ethereum/market_chart',
+
 }
 
 # --- FILES & SCOPES ---
@@ -190,17 +189,12 @@ class DataStore:
         self.lock = threading.Lock()
         self.weather = {}
         self.aqi = 0
-        self.gmail_unread = 0
         self.claude = {'error': False, 'five_hour': {}, 'seven_day': {}}
         self.calendar_events = []
         self.tasks_items = []
-        self.sysload = {'cpu': 0, 'ram_free': 0, 'history': deque(maxlen=30)}
-        self.crypto = {'btc': 0, 'eth': 0, 'btc_hist': [], 'eth_hist': []}
-        self.ping = {'current': 0, 'history': deque(maxlen=50)}
 
         self.last_update = {
-            'weather': 0, 'gmail': 0,
-            'crypto': 0, 'sysload': 0, 'ping': 0,
+            'weather': 0,
             'claude': 0, 'calendar': 0, 'tasks': 0,
             'aqi': 0,
         }
@@ -216,7 +210,6 @@ def get_data_fingerprint(ds):
         return (
             ds.weather.get('current', {}).get('temperature_2m'),
             ds.weather.get('current', {}).get('weather_code'),
-            ds.gmail_unread,
             str(ds.calendar_events),
             ds.claude.get('five_hour', {}).get('utilization'),
             ds.claude.get('seven_day', {}).get('utilization'),
@@ -344,21 +337,6 @@ def update_data_thread():
                         data_store.aqi = int(round(val))
             data_store.last_update['aqi'] = now
 
-        if now - data_store.last_update['gmail'] > 300:
-            try:
-                creds = None
-                if os.path.exists(GMAIL_TOKEN_PATH):
-                    creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GOOGLE_SCOPES)
-                    if creds and creds.expired and creds.refresh_token:
-                        creds.refresh(Request())
-                        with open(GMAIL_TOKEN_PATH, 'w') as t: t.write(creds.to_json())
-                if creds and creds.valid:
-                    service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
-                    label_info = service.users().labels().get(userId='me', id='INBOX').execute()
-                    with data_store.lock: data_store.gmail_unread = label_info.get('messagesUnread', 0)
-            except:
-                pass
-            data_store.last_update['gmail'] = now
 
         if ENABLE_CALENDAR and now - data_store.last_update['calendar'] > 300:
             try:
@@ -495,26 +473,6 @@ def draw_icon(draw, x, y, name, size=(40, 40), is_white=False):
     else:
         draw.rectangle((x, y, x + size[0], y + size[1]), outline="white" if is_white else "black")
 
-
-def draw_sparkline(draw, x, y, data, max_items=50, width=400, height=60, color="black", style="bar"):
-    if not data: return
-    max_val = max(data) if max(data) > 0 else 1
-    step = width / max(max_items - 1, 1)
-
-    if style == "line":
-        points = []
-        for i, val in enumerate(data):
-            px = x + i * step
-            py = y + height - (val / max_val) * height
-            points.append((px, py))
-        if len(points) > 1: draw.line(points, fill=color, width=2)
-    elif style == "bar":
-        bar_w = max(int(step) - 1, 1)
-        for i, val in enumerate(data):
-            bh = int((val / max_val) * height)
-            bx = x + i * step
-            by = y + height - bh
-            draw.rectangle((bx, by, bx + bar_w, y + height), fill=color)
 
 
 def get_weather_icon(code, is_day=1):
@@ -1136,7 +1094,6 @@ def main():
             try:
                 signal.alarm(90)
                 image = render_screen(epd, fonts)
-                image.save('/tmp/dashboard_debug.png')
                 buf = epd.getbuffer(image)
 
                 if refresh_counter >= 600:

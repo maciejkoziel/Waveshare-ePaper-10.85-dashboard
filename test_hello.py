@@ -15,7 +15,7 @@ epd.Clear()
 img = Image.new("RGB", (1360, 480), "white")
 draw = ImageDraw.Draw(img)
 
-font = ImageFont.truetype(os.path.join(FONT_DIR, 'Aldrich-Regular.ttc'), 100)
+font = ImageFont.truetype(os.path.join(FONT_DIR, 'ArchivoBlack-Regular.ttf'), 100)
 
 draw.text((80,  180), "HELLO",  font=font, fill="black")
 draw.text((80,  300), "WORLD",  font=font, fill="red")

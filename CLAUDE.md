@@ -244,7 +244,11 @@ Credential/token files (not in repo, created on first run):
 - GC runs every 10 refresh cycles
 - Every 600 refreshes (~30h): full `sleep()` → `Init()` → `Clear()` to eliminate ghosting
 
-**Weather fetch:** every 600s. Uses `fetch_with_retry(url, retries=3, delay=5)` — retries up to 3× with 5s delay on failure. `last_update['weather']` only set on success, so failed fetches retry next loop (~1s).
+**Weather fetch:** every 600s. Uses `fetch_with_retry(url, retries=3, delay=5)` — retries up to 3× with 5s delay on failure. `last_update['weather']` only set on success, so failed fetches retry next loop (~1s). Daily params include `precipitation_probability_max` (rain % in forecast strip).
+
+**AQI fetch:** every 600s from `air-quality-api.open-meteo.com` (`european_aqi`, HTTP, no key). Stored in `data_store.aqi`; `0` = not yet fetched, masthead omits it. `last_update['aqi']` set after every attempt (no retry hammering).
+
+**Polish holidays:** computed locally in `polish_holiday(date)` — fixed dates dict + Easter offsets (Anonymous Gregorian algorithm in `easter_date`). No API. Shown in masthead only on the day.
 
 **Refresh timing (G version — hardware enforced):**
 - Full refresh: ~21 seconds per update
@@ -262,21 +266,22 @@ enable_strava      = false
 enable_bambu       = false
 enable_roborock    = false
 enable_antigravity = false
-enable_claude      = false
+enable_tasks       = true
+enable_claude      = true
 enable_spotify     = false
+enable_calendar    = true
 ```
 
-Disabled widgets show empty col2 space. Col1 always shows weather. Col3 always shows the custom message widget (blank when no message is set).
+Middle column: calendar (or Bambu if calendar off) + tasks (or Antigravity if tasks off). Strava (if on) renders compact above calendar. Left rail always weather. Col3: messages preempt fallback cards (next event, Claude usage).
 
 ## Font Notes
 
 Fonts in `fnt/`. Active fonts:
-- `ElmsSans-Regular.ttf` — all widget text (Elms Sans weight 400, Google Fonts)
-- `Doto-Bold.ttf` — calendar band (Doto weight 700, dot-matrix style, Google Fonts)
-- `Doto-Regular.ttf` — available, not active
-- `AntonSC-Regular.ttf` — available, not active
-- `Aldrich-Regular.ttc` — legacy, not active
-- `Oregano-*.ttf`, `BilboSwashCaps-Regular.ttf` — available, not active
+- `AtkinsonHyperlegible-Regular.ttf` — body text (keys `r20`–`r26` in fonts dict)
+- `AtkinsonHyperlegible-Bold.ttf` — headers, times, hero numbers (keys `b22`–`b96`)
+- All others (`ElmsSans`, `Doto`, `EncodeSansCondensed`, `AntonSC`, `Aldrich`, `Oregano`, `BilboSwashCaps`) — available, not active
+
+Atkinson has no `↑↓☂` glyphs — sunrise/sunset triangles and rain drops are drawn with `draw_tri()` / `draw_drop()` polygons.
 
 **To add Google Font:** fetch CSS from `fonts.googleapis.com`, extract `.ttf` URL, `curl` into `fnt/`, load via `ImageFont.truetype`.
 
@@ -313,44 +318,45 @@ Location controls Open-Meteo weather API. Wrong coords → wrong weather data.
 
 ## Layout
 
-Display 1360×480. `render_screen()` divides into three equal columns (`col_w = 453px`). Calendar band spans col1+col2 top.
+Display 1360×480. "Bold zones" layout (2026-06 redesign):
 
 ```
-y=0  ┌──────────────────────────────────────────┬──────────────┐
-     │  Calendar (single line, Doto Bold)        │              │
-y=65 ├──────────────────────────────────────────┤   col3       │
-     │  col1 (Weather)   │  col2 (Widgets)       │  ┌────────┐ │
-     │                   │                       │  │header  │ │
-     │  Temp + icon + UV │  Strava (opt)         │  │body    │ │
-     │  Humidity, Press  │  Bambu (opt)          │  │(2 lines│ │
-     │  (y=65–200)       │                       │  │max)    │ │
-y=210├───────────────────┤  ─────────────────    │  │X ago   │ │
-     │  5-day forecast   │  Roborock /           │  └────────┘ │
-     │  (y=220–480)      │  Antigravity (opt)    │  (top 1/3,  │
-     │                   │                       │  ~y10–170)  │
-y=470└───────────────────┴───────────────────────┴──────────────┘
+y=0  ┌────────────────────────────────────────────────────────────┐
+     │ MASTHEAD (black band): date · holiday · ▲▼sun · moon · AQI │
+y=54 ├──────────────┬───────────────────────────┬─────────────────┤
+     │ left rail    │ middle (flow)             │ col3 (3 slots)  │
+     │ icon + temp  │ NADCHODZĄCE (calendar)    │ ┌─ NASTĘPNE ──┐ │
+     │ b96 + UV b52 │ rows: sq|day|time|title   │ │ black card  │ │
+     │ hum/pres/wind│ tasks (checkbox rows)     │ ├─ CLAUDE AI ─┤ │
+     │ (x0–380)     │ (x404–892, floor y=336)   │ │ 2 bars      │ │
+y=344├──────────────┴───────────────────────────┤ ├─ message ───┤ │
+     │ FORECAST STRIP: day+rain% / icon / hi+lo │ │ (preempts)  │ │
+y=480└───────────────────────────────────────────┴─────────────────┘
 ```
 
-**Key constants:**
-- `y_cal_div = 65` — bottom of calendar band / top of col content
-- `col1_x = 20` — left margin
-- `col2_x = col_w + 20` — col2 left edge
-- `col3_x = col_w * 2 + 30` — col3 left edge
-- Col1 separator at y=210 (between current weather and forecast)
-- Col2 separators at y=165 (after Strava) and y=320 (before Roborock/Antigravity)
-- Forecast `f_y = 220`, `icon_sz` capped at 50
+**Key constants (`render_screen`):**
+- `BAND_H = 54` — masthead height
+- `rail_w = 380` — left rail width; divider at x=388
+- `mid_x = 404`, `mid_w ≈ 488` — middle column; `MID_FLOOR = 336`, `row_h = 33`
+- `c3x = 916`, `c3w = 432` — col3; divider at x=904
+- Forecast strip: `sy = 344`, spans x20–892; cells `strip_w // n_days`; compact fonts when `cell_w < 165` (7-day mode)
+- Col3 slots: `SLOT_H = 130`, `SLOT_GAP = 6`, first at y=64
 
-**i18n:** `lang/pl.toml` and `lang/en.toml`. All Polish strings use full diacritics. `weekdays_full` key holds unabbreviated weekday names used by calendar.
+**Color rules:** red = urgent (event <3h, today's forecast label, rain ≥60%, UV ≥6 box, usage bar ≥80%, AQI ≥60 box). Yellow = accents (family-calendar squares, masthead triangles, holiday, card labels on black, AQI 40–59).
+
+**Col3 slot priority:** messages always win, fill slots top-down after fallback cards yield. Cards order: NASTĘPNE (next event hero, only if calendar on + events exist), CLAUDE AI (if enabled). 3 messages → no cards visible.
+
+**i18n:** `lang/pl.toml` and `lang/en.toml`. All Polish strings use full diacritics. `months_genitive` for masthead date ("11 CZERWCA"), `wind_dirs` for compass labels, `next_in_*` for countdown formats. Holiday names hardcoded in `main.py` (PL proper nouns, not translated).
 
 ## Custom Message Widget (col3)
 
-Col3 shows up to 3 messages sent over the network. When no messages are set, col3 is blank.
+Col3 shows up to 3 messages sent over the network. Slots without messages show fallback cards (NASTĘPNE next-event hero, CLAUDE AI usage) — see Layout section for preemption rules.
 
 **Queue:** up to 3 messages, round-robin — newest replaces oldest. Each message stored with the sender's IP address.
 
-**Slot geometry:** col3 full height split into 3 equal slots (150px each, 5px gap). Only occupied slots are rendered; empty slots are blank.
+**Slot geometry:** 3 slots below masthead — `SLOT_H = 130`, `SLOT_GAP = 6`, first slot at y=64.
 
-**Layout inside each slot:** header (`fonts['24']`) at top-left, "X ago" timestamp at top-right (`fonts['20']`), separator line, body (`fonts['20']`, max 2 lines). Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
+**Layout inside each message slot:** header (`b24`) at top-left, "X ago" timestamp at top-right (`r20`), separator line, body (`r22`, max 2 lines). Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
 
 **message_server.py** runs as a separate systemd service (`dashboard-message.service`) and listens on port 5000.
 

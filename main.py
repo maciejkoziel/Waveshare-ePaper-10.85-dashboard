@@ -774,9 +774,8 @@ def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
     if countdown:
         draw.text((x + w - 12 - int(fonts['r20'].getlength(countdown)), y + 10),
                   countdown, font=fonts['r20'], fill='yellow')
-    sq_color = 'white' if ev['calendar'] == 'personal' else 'yellow'
-    draw.rectangle([x + 12, y + 40, x + 26, y + 54], fill=sq_color, outline='white')
-    draw.text((x + 34, y + 36), big, font=fonts['b36'], fill='white')
+    draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
+    draw.text((x + 12, y + 40), big, font=fonts['b36'], fill='white')
     draw.text((x + 12, y + 82), fit_text(ev['title'], fonts['r22'], w - 24), font=fonts['r22'], fill='white')
 
 

@@ -17,7 +17,7 @@ A fully functional E-ink dashboard running on a Raspberry Pi. Designed for the W
 * **Spotify:** Displays the currently playing track and artist via Last.fm.
 * **Antigravity usage data:** Displays usage data for Antigravity, showing the limit and reset time.
 * **Claude Code usage data:** Displays usage data for Claude Code, showing the 5-hour limit, 7-day limit, and reset times.
-* **Custom message widget:** A dedicated right column for messages sent over the network via a built-in HTTP server. Supports header, body, e-ink colors, border, and TTL-based auto-clear. Any device on the network can push a message with a single `curl` command.
+* **Custom message widget:** A dedicated right column that displays up to 3 messages sent over the network via a built-in HTTP server. New messages are added to a queue; the oldest is dropped when the queue is full. Supports header, body, e-ink colors, border, and per-message TTL. Any device on the network can push a message with a single `curl` command, and DELETE only removes messages sent from that device's IP.
 
 ---
 
@@ -69,14 +69,17 @@ cd Waveshare-ePaper-10.85-dashboard
 bash install-service.sh
 ```
 
-This installs and starts a systemd service (`dashboard.service`) that runs on boot and restarts automatically on failure.
+This installs and starts two systemd services that run on boot and restart automatically on failure:
+- `dashboard.service` — the main display process (`main.py`)
+- `dashboard-message.service` — the message HTTP server (`message_server.py`)
 
 **Useful commands:**
 ```bash
-systemctl status dashboard      # check status
-journalctl -u dashboard -f      # follow logs
-sudo systemctl restart dashboard
-sudo systemctl stop dashboard
+systemctl status dashboard dashboard-message    # check status
+journalctl -u dashboard -f                      # follow dashboard logs
+journalctl -u dashboard-message -f              # follow message server logs
+sudo systemctl restart dashboard dashboard-message
+sudo systemctl stop dashboard dashboard-message
 ```
 
 ---
@@ -152,14 +155,9 @@ These three share a single OAuth flow:
 2. Generate a Last.fm API Key and set `api_key` and `username` under `[lastfm]` in `settings_local.toml`.
 
 ### Custom Message Widget
-The right column (col3) is driven by `message_server.py`, a lightweight HTTP server that runs alongside the dashboard.
+The right column (col3) is driven by `message_server.py`, a lightweight HTTP server installed alongside the dashboard by `install-service.sh`.
 
-The message is displayed in a box occupying the top 1/3 of col3 (~160px). The box shows a header, up to 2 lines of body text, and a "received X ago" timestamp pinned to the bottom of the box. The rest of col3 is blank.
-
-Start it once (it persists across dashboard restarts):
-```bash
-tmux new-session -d -s msgserver "cd ~/Waveshare-ePaper-10.85-dashboard && python3 message_server.py"
-```
+Col3 displays up to **3 messages** stacked vertically, each in its own colored box. Messages are stored in a queue — when a 4th message arrives, the oldest is dropped. Each box shows a header, up to 2 lines of body text, and a "X ago" timestamp. Empty slots are invisible.
 
 Send a message from any device on the network:
 ```bash
@@ -174,11 +172,14 @@ curl -X POST http://<pi-ip>:5000/message \
     "ttl": 3600
   }'
 
-# Clear it
+# Clear messages sent from this device
 curl -X DELETE http://<pi-ip>:5000/message
+
+# View current queue
+curl http://<pi-ip>:5000/message
 ```
 
-Colors: `black`, `white`, `red`, `yellow`. `ttl: 0` = persistent. The server automatically signals the dashboard to refresh after each change.
+Colors: `black`, `white`, `red`, `yellow`. `ttl: 0` = persistent; each message expires independently. DELETE only removes messages sent from the caller's IP — messages from other devices are unaffected. The server automatically signals the dashboard to refresh after each change.
 
 ---
 

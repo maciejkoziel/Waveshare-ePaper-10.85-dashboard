@@ -1190,36 +1190,39 @@ def render_screen(epd, fonts):
     # --- COLUMN 3 (Custom Message) ---
     col3_x = col_w * 2 + 30
     col3_w = total_width - col3_x - 10
+    slot_top = 10
+    slot_bot = slot_top + epd.height // 3   # 160px = 1/3 column height
 
     msg = read_message()
     if msg:
         bg  = msg.get('bg_color', 'white')
         tc  = msg.get('text_color', 'black')
         bc  = msg.get('border_color', '')
+        border = 4 if bc else 0
 
-        draw.rectangle((col3_x, 10, col3_x + col3_w, 470), fill=bg)
+        draw.rectangle((col3_x, slot_top, col3_x + col3_w, slot_bot), fill=bg)
         if bc:
-            draw.rectangle((col3_x, 10, col3_x + col3_w, 470), outline=bc, width=4)
+            draw.rectangle((col3_x, slot_top, col3_x + col3_w, slot_bot), outline=bc, width=border)
 
         pad = 14
-        y = 20
+        y = slot_top + 8
         header = msg.get('header', '').strip()
         if header:
-            draw.text((col3_x + pad, y), header, font=fonts['35'], fill=tc)
-            y += 45
+            draw.text((col3_x + pad, y), header, font=fonts['28'], fill=tc)
+            y += 36
             draw.line((col3_x + pad, y, col3_x + col3_w - pad, y), fill=tc, width=1)
-            y += 12
+            y += 8
 
         body = msg.get('body', '').strip()
         if body:
-            for line in wrap_text(body, fonts['24'], col3_w - pad * 2)[:12]:
-                draw.text((col3_x + pad, y), line, font=fonts['24'], fill=tc)
-                y += 30
+            for line in wrap_text(body, fonts['20'], col3_w - pad * 2)[:2]:
+                draw.text((col3_x + pad, y), line, font=fonts['20'], fill=tc)
+                y += 26
 
         created_at = msg.get('created_at')
         if created_at:
             ago = time_ago(created_at)
-            draw.text((col3_x + pad, 450), ago, font=fonts['20'], fill=tc)
+            draw.text((col3_x + pad, slot_bot - border - 20 - 6), ago, font=fonts['18'], fill=tc)
 
     return Himage
 

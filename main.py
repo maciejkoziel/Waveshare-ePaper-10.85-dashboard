@@ -985,15 +985,15 @@ def render_screen(epd, fonts):
                 bar_w = col_w - 40
                 bx = col1_x
                 draw.text((col1_x, cu_y + 24), STRINGS.get('claude_5h', '5-Hour Limit: {pct}% (Resets in {time})').format(pct=pct_5h, time=rem_5h), font=fonts['20'], fill="black")
-                draw.rectangle((bx, cu_y + 46, bx + bar_w, cu_y + 56), outline="black", width=2)
+                draw.rectangle((bx, cu_y + 50, bx + bar_w, cu_y + 60), outline="black", width=2)
                 fill_w = int((bar_w - 4) * min(pct_5h / 100.0, 1.0))
                 if fill_w > 0:
-                    draw.rectangle((bx + 2, cu_y + 48, bx + 2 + fill_w, cu_y + 54), fill="black")
-                draw.text((col1_x, cu_y + 62), STRINGS.get('claude_7d', '7-Day Limit: {pct}% (Resets in {time})').format(pct=pct_7d, time=rem_7d), font=fonts['20'], fill="black")
-                draw.rectangle((bx, cu_y + 84, bx + bar_w, cu_y + 94), outline="black", width=2)
+                    draw.rectangle((bx + 2, cu_y + 52, bx + 2 + fill_w, cu_y + 58), fill="black")
+                draw.text((col1_x, cu_y + 66), STRINGS.get('claude_7d', '7-Day Limit: {pct}% (Resets in {time})').format(pct=pct_7d, time=rem_7d), font=fonts['20'], fill="black")
+                draw.rectangle((bx, cu_y + 92, bx + bar_w, cu_y + 102), outline="black", width=2)
                 fill_w = int((bar_w - 4) * min(pct_7d / 100.0, 1.0))
                 if fill_w > 0:
-                    draw.rectangle((bx + 2, cu_y + 86, bx + 2 + fill_w, cu_y + 92), fill="black")
+                    draw.rectangle((bx + 2, cu_y + 94, bx + 2 + fill_w, cu_y + 100), fill="black")
 
     draw.line((col_w, y_cal_div, col_w, 470), fill="black", width=2)
 

@@ -777,9 +777,19 @@ def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
     draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
     tc = 'yellow' if ev.get('calendar') == 'family' else 'white'
     time_w = int(fonts['b36'].getlength(big))
-    draw.text((x + 12, y + 40), big, font=fonts['b36'], fill=tc)
-    title = fit_text(ev['title'], fonts['r22'], w - 24 - time_w - 10)
-    draw.text((x + 12 + time_w + 10, y + 47), title, font=fonts['r22'], fill=tc)
+    title_max_w = w - 34 - time_w  # x+12 + time_w + 10 gap + 12 right pad
+    lines = wrap_text(ev['title'], fonts['r22'], title_max_w)[:2]
+    TIME_H, LINE_H, LABEL_LINE_H = 40, 28, 26  # b36 height, r22 row pitch, r22 text height
+    label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
+    block_h = max(TIME_H, label_h)
+    # center the block in the 68px content area (y+36 to y+104)
+    block_y = y + 36 + (68 - block_h) // 2
+    time_y = block_y + (block_h - TIME_H) // 2
+    title_y = block_y + (block_h - label_h) // 2
+    draw.text((x + 12, time_y), big, font=fonts['b36'], fill=tc)
+    tx = x + 12 + time_w + 10
+    for i, line in enumerate(lines):
+        draw.text((tx, title_y + i * LINE_H), line, font=fonts['r22'], fill=tc)
 
 
 def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):

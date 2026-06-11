@@ -344,11 +344,13 @@ y=470└───────────────────┴────
 
 ## Custom Message Widget (col3)
 
-Col3 shows a custom message sent over the network. When no message is set, col3 is blank.
+Col3 shows up to 3 messages sent over the network. When no messages are set, col3 is blank.
 
-**Slot geometry:** box occupies top 1/3 of col3 height (~y=10–170, ~160px tall). Rest of col3 is blank.
+**Queue:** up to 3 messages, round-robin — newest replaces oldest. Each message stored with the sender's IP address.
 
-**Layout inside box:** header (`fonts['28']`) at top, body (`fonts['20']`, max 2 lines) below, "X ago" timestamp pinned to bottom-inside of box. Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
+**Slot geometry:** col3 full height split into 3 equal slots (150px each, 5px gap). Only occupied slots are rendered; empty slots are blank.
+
+**Layout inside each slot:** header (`fonts['24']`) at top-left, "X ago" timestamp at top-right (`fonts['20']`), separator line, body (`fonts['20']`, max 2 lines). Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
 
 **message_server.py** runs as a separate process (tmux session `msgserver`) and listens on port 5000.
 
@@ -361,15 +363,15 @@ ssh maciej@192.168.12.175 'cd ~/Waveshare-ePaper-10.85-dashboard && tmux new-ses
 ### API
 
 ```bash
-# Set a message
+# Add a message (appended to queue; oldest dropped when queue full)
 curl -X POST http://192.168.12.175:5000/message \
   -H 'Content-Type: application/json' \
   -d '{"header":"ALERT","body":"Dinner is ready","text_color":"black","bg_color":"yellow","border_color":"red","ttl":3600}'
 
-# Clear message
+# Clear all messages sent from this IP
 curl -X DELETE http://192.168.12.175:5000/message
 
-# Read current message
+# Read current message list
 curl http://192.168.12.175:5000/message
 ```
 
@@ -382,11 +384,11 @@ curl http://192.168.12.175:5000/message
 | `text_color` | string | `black` `white` `red` `yellow` | Default: `black` |
 | `bg_color` | string | `black` `white` `red` `yellow` | Default: `white` |
 | `border_color` | string | `black` `white` `red` `yellow` `""` | Empty = no border |
-| `ttl` | int | seconds | `0` = persistent; auto-clears on expiry |
+| `ttl` | int | seconds | `0` = persistent; auto-clears per message on expiry |
 
 After any POST/DELETE the server sends SIGUSR1 to main.py, triggering an immediate display refresh.
 
-State persists across restarts in `dashboard_message.json`.
+State persists across restarts in `dashboard_message.json` (JSON array of up to 3 message objects).
 
 ## Pi Zero Constraints
 

@@ -1243,6 +1243,7 @@ def main():
             try:
                 signal.alarm(90)
                 image = render_screen(epd, fonts)
+                image.save('/tmp/dashboard_debug.png')
                 buf = epd.getbuffer(image)
 
                 if refresh_counter >= 600:

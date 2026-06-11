@@ -187,16 +187,16 @@ epd.display(buf)   # takes ~21 seconds
 git add -p && git commit -m "..." && git push
 
 # 2. Pull on Pi and restart
-ssh maciej@192.168.12.175 'cd ~/Waveshare-ePaper-10.85-dashboard && git pull && tmux kill-session -t dashboard 2>/dev/null; tmux new-session -d -s dashboard "python3 main.py"'
+ssh maciej@192.168.12.175 'cd ~/Waveshare-ePaper-10.85-dashboard && git pull && sudo systemctl restart dashboard dashboard-message'
 
 # 3. Trigger immediate refresh (run after a few seconds for process to start)
 ssh maciej@192.168.12.175 'kill -USR1 $(pgrep -f main.py | head -1)'
 
 # Watch logs
-ssh maciej@192.168.12.175 'tail -f ~/Waveshare-ePaper-10.85-dashboard/dashboard.log'
+ssh maciej@192.168.12.175 'journalctl -u dashboard -f'
 
-# Attach to running session
-ssh maciej@192.168.12.175 'tmux attach -t dashboard'
+# Check status
+ssh maciej@192.168.12.175 'systemctl status dashboard dashboard-message'
 ```
 
 ## On-Demand Refresh
@@ -352,12 +352,12 @@ Col3 shows up to 3 messages sent over the network. When no messages are set, col
 
 **Layout inside each slot:** header (`fonts['24']`) at top-left, "X ago" timestamp at top-right (`fonts['20']`), separator line, body (`fonts['20']`, max 2 lines). Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
 
-**message_server.py** runs as a separate process (tmux session `msgserver`) and listens on port 5000.
+**message_server.py** runs as a separate systemd service (`dashboard-message.service`) and listens on port 5000.
 
 ### Starting the message server
 
 ```bash
-ssh maciej@192.168.12.175 'cd ~/Waveshare-ePaper-10.85-dashboard && tmux new-session -d -s msgserver "python3 message_server.py"'
+ssh maciej@192.168.12.175 'sudo systemctl start dashboard-message'
 ```
 
 ### API

@@ -93,7 +93,7 @@ except FileNotFoundError:
 
 # --- API ENDPOINTS ---
 API_ENDPOINTS = {
-    'weather': 'https://api.open-meteo.com/v1/forecast',
+    'weather': 'http://api.open-meteo.com/v1/forecast',
     'strava_token': 'https://www.strava.com/oauth/token',
     'strava_auth': 'https://www.strava.com/oauth/authorize',
     'strava_activities': 'https://www.strava.com/api/v3/athlete/activities',

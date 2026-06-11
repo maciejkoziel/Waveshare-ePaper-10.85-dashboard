@@ -1169,7 +1169,9 @@ def main():
         }
 
         refresh_counter = 0
-        MIN_REFRESH_INTERVAL = 180
+        MIN_REFRESH_INTERVAL = 900   # 15 min — skip if nothing changed
+        MSG_REFRESH_INTERVAL = 60    # minimum between message-triggered refreshes
+        last_render_fingerprint = None
 
         while True:
             start_time = time.time()
@@ -1194,6 +1196,7 @@ def main():
 
                 epd.PowerOff()
                 signal.alarm(0)
+                last_render_fingerprint = get_data_fingerprint(data_store)
                 del image
                 del buf
                 if refresh_counter % 10 == 0: gc.collect()
@@ -1217,11 +1220,14 @@ def main():
             while True:
                 elapsed = time.time() - start_time
                 if refresh_event.is_set():
-                    refresh_event.clear()
-                    break
+                    if elapsed >= MSG_REFRESH_INTERVAL:
+                        refresh_event.clear()
+                        break
                 if elapsed >= MIN_REFRESH_INTERVAL:
-                    break
-                remaining = MIN_REFRESH_INTERVAL - elapsed
+                    if get_data_fingerprint(data_store) != last_render_fingerprint:
+                        break
+                    start_time = time.time()  # nothing changed — wait another interval
+                remaining = max(0, MIN_REFRESH_INTERVAL - (time.time() - start_time))
                 data_store.data_changed.wait(timeout=min(remaining, 1.0))
                 data_store.data_changed.clear()
 

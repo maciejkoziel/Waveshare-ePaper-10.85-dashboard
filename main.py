@@ -744,6 +744,45 @@ def draw_next_event_card(draw, fonts, x, w, top, h, ev, now_utc, today_date):
               font=fonts['r24'], fill='white')
 
 
+def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
+    draw.line((x + 8, y, x + w - 8, y), fill='black', width=1)
+    soon = (not ev.get('allday', True) and
+            0 <= (ev['dt'] - now_utc).total_seconds() <= 10800)
+    tc = 'red' if soon else 'black'
+    draw.text((x + 12, y + 8), STRINGS.get('next_title', 'NEXT'), font=fonts['b22'], fill='black')
+    if ev.get('allday'):
+        delta = (ev['event_date'] - today_date).days
+        if delta == 0:
+            big = STRINGS.get('calendar_today', 'today').upper()
+        elif delta == 1:
+            big = STRINGS.get('calendar_tomorrow', 'tomorrow').upper()
+        else:
+            big = f"+{delta}d"
+        countdown = ''
+    else:
+        big = ev['dt'].astimezone().strftime('%H:%M')
+        secs = (ev['dt'] - now_utc).total_seconds()
+        if secs < 0:
+            countdown = ''
+        else:
+            mins = int(secs // 60)
+            days, rem = divmod(mins, 1440)
+            hours, minutes = divmod(rem, 60)
+            if days > 0:
+                countdown = STRINGS.get('next_in_dh', 'in {days}d {hours}h').format(days=days, hours=hours)
+            elif hours > 0:
+                countdown = STRINGS.get('next_in_hm', 'in {hours}h {minutes}m').format(hours=hours, minutes=minutes)
+            else:
+                countdown = STRINGS.get('next_in_m', 'in {minutes}m').format(minutes=minutes)
+    if countdown:
+        draw.text((x + w - 12 - int(fonts['r20'].getlength(countdown)), y + 10),
+                  countdown, font=fonts['r20'], fill=tc)
+    sq_color = 'black' if ev['calendar'] == 'personal' else 'yellow'
+    draw.rectangle([x + 12, y + 40, x + 26, y + 54], fill=sq_color, outline='black')
+    draw.text((x + 34, y + 36), big, font=fonts['b36'], fill=tc)
+    draw.text((x + 12, y + 82), fit_text(ev['title'], fonts['r22'], w - 24), font=fonts['r22'], fill=tc)
+
+
 def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):
     if separator:
         draw.line((x + 8, top - 4, x + w, top - 4), fill='black', width=1)
@@ -902,6 +941,12 @@ def render_screen(epd, fonts):
 
     draw.line((rail_w + 8, BAND_H + 14, rail_w + 8, MID_FLOOR), fill='black', width=1)
 
+    # next event compact widget in left rail, below weather detail rows
+    if ENABLE_CALENDAR and calendar_events:
+        # ry=68, ly=ry+90=158, wind at ly+72=230, icon 26px + 8px gap = 264
+        draw_next_event_rail(draw, fonts, 0, BAND_H + 14 + 90 + 72 + 34, rail_w,
+                             calendar_events[0], now_utc, today_date)
+
     # --- MIDDLE (calendar + tasks, flow layout) ---
     y = BAND_H + 12
     if ENABLE_CALENDAR:
@@ -994,17 +1039,13 @@ def render_screen(epd, fonts):
     SLOT_H, SLOT_GAP = 130, 6
     messages = read_messages()[:3]
     cards = []
-    if ENABLE_CALENDAR and calendar_events:
-        cards.append(('next', calendar_events[0]))
     if ENABLE_CLAUDE:
         cards.append(('claude', claude))
     cards = cards[:max(0, 3 - len(messages))]
     slots = cards + [('msg', m) for m in messages]
     for i, (kind, payload) in enumerate(slots[:3]):
         top = BAND_H + 10 + i * (SLOT_H + SLOT_GAP)
-        if kind == 'next':
-            draw_next_event_card(draw, fonts, c3x, c3w, top, SLOT_H, payload, now_utc, today_date)
-        elif kind == 'claude':
+        if kind == 'claude':
             draw_claude_card(draw, fonts, c3x, c3w, top, SLOT_H, payload, separator=(i > 0))
         else:
             draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, payload)

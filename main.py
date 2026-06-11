@@ -55,7 +55,8 @@ try:
     LOCATION_LON = _loc.get('lon', 20.4934273)
     LANGUAGE = _cfg.get('display', {}).get('language', 'en')
     FORECAST_DAYS = _cfg.get('weather', {}).get('forecast_days', 5)
-    FAMILY_CALENDAR_KEYWORDS = _cfg.get('calendar', {}).get('family_keywords', ['family'])
+    _DEFAULT_CALENDARS = [{'match': 'primary', 'color': 'white'}, {'match': 'family', 'color': 'yellow'}]
+    CALENDAR_CONFIG = _cfg.get('calendar', {}).get('calendars', _DEFAULT_CALENDARS)
 except FileNotFoundError:
     ENABLE_CALENDAR = False
     ENABLE_TASKS = False
@@ -64,7 +65,7 @@ except FileNotFoundError:
     LOCATION_LON = 20.4934273
     LANGUAGE = 'en'
     FORECAST_DAYS = 5
-    FAMILY_CALENDAR_KEYWORDS = ['family']
+    CALENDAR_CONFIG = [{'match': 'primary', 'color': 'white'}, {'match': 'family', 'color': 'yellow'}]
 
 # --- LANGUAGE STRINGS ---
 LANG_DIR = os.path.join(BASE_DIR, 'lang')
@@ -354,10 +355,13 @@ def update_data_thread():
                     calendar_ids = {}
                     for cal in cal_list.get('items', []):
                         name = cal.get('summary', '')
-                        if cal.get('primary'):
-                            calendar_ids[cal['id']] = 'personal'
-                        elif any(kw in name.lower() for kw in FAMILY_CALENDAR_KEYWORDS):
-                            calendar_ids[cal['id']] = 'family'
+                        for entry in CALENDAR_CONFIG:
+                            if entry['match'] == 'primary' and cal.get('primary'):
+                                calendar_ids[cal['id']] = entry['color']
+                                break
+                            elif entry['match'] != 'primary' and entry['match'].lower() in name.lower():
+                                calendar_ids[cal['id']] = entry['color']
+                                break
                     all_events = []
                     for cal_id, cal_type in calendar_ids.items():
                         result = cal_service.events().list(
@@ -384,7 +388,7 @@ def update_data_thread():
                                 dt_end = None
                             all_events.append({
                                 'title': ev.get('summary', '?'),
-                                'calendar': cal_type,
+                                'color': cal_type,
                                 'dt': dt_ev,
                                 'dt_end': dt_end,
                                 'event_date': event_date,
@@ -678,7 +682,7 @@ def draw_next_event_card(draw, fonts, x, w, top, h, ev, now_utc, today_date):
 
 def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
     draw.rectangle((x, y, x + w, y + 108), fill='black')
-    tc = 'yellow' if ev.get('calendar') == 'family' else 'white'
+    tc = ev.get('color', 'white')
     dt_end = ev.get('dt_end')
     ongoing = (not ev.get('allday')
                and ev['dt'] <= now_utc
@@ -937,7 +941,7 @@ def render_screen(epd, fonts):
                 soon = (not ev.get('allday', True) and dt_ev is not None and
                         dt_ev <= now_utc and ev.get('dt_end') is not None and now_utc < ev['dt_end'])
                 color = 'red' if soon else 'black'
-                sq_color = 'black' if ev['calendar'] == 'personal' else 'yellow'
+                sq_color = ev.get('color', 'white') if ev.get('color', 'white') != 'white' else 'black'
                 draw.rectangle([mid_x + 2, y + 7, mid_x + 16, y + 21], fill=sq_color, outline='black')
                 delta = (ev['event_date'] - today_date).days
                 if delta == 0:

@@ -99,10 +99,19 @@ forecast_days = 5   # 5 or 7
 [display]
 language = "en"     # "en" or "pl"
 
-[calendar]
-# Calendar names containing any of these substrings are treated as "family"
-# and shown in yellow instead of white. Case-insensitive.
-family_keywords = ["family"]   # e.g. ["family", "rodzina", "shared"]
+# Which Google calendars to display and in what color.
+# Each entry matches one calendar. "primary" matches your main Google calendar.
+# All other entries do a case-insensitive substring match against the calendar name.
+# Unmatched calendars are not shown. Colors: white, yellow, red, black.
+# Color is used for the square marker in the event list and text in the NEXT box.
+# "white" = neutral (black square in list, white text in NEXT box).
+[[calendar.calendars]]
+match = "primary"
+color = "white"
+
+[[calendar.calendars]]
+match = "family"
+color = "yellow"
 
 [message_server]
 port = 5000         # port for the custom message HTTP server

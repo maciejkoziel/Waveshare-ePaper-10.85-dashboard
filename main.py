@@ -335,7 +335,7 @@ def update_data_thread():
         now = time.time()
 
         if now - data_store.last_update['weather'] > 600:
-            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_probability_max&timezone=auto&forecast_days={FORECAST_DAYS}"
+            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_probability_max&timezone=auto&forecast_days={FORECAST_DAYS + 1}"
             w_data = fetch_with_retry(weather_url, timeout=30)
             if w_data:
                 with data_store.lock:
@@ -1015,18 +1015,19 @@ def render_screen(epd, fonts):
         d_rain = daily.get('precipitation_probability_max', [])
         sy = 390
         draw.line((20, sy, c3x - 24, sy), fill='black', width=1)
-        n_days = min(FORECAST_DAYS, len(d_times))
+        n_days = min(FORECAST_DAYS, len(d_times) - 1)
         strip_w = c3x - 24 - 20
         cell_w = strip_w // max(n_days, 1)
         icon_sz = 40
-        for i in range(n_days):
-            ox = 20 + i * cell_w
+        for slot in range(n_days):
+            i = slot + 1  # skip today (index 0)
+            ox = 20 + slot * cell_w
             try:
                 day_dt = datetime.strptime(d_times[i], "%Y-%m-%d")
                 day_label = weekdays_list[day_dt.weekday()]
             except Exception:
                 day_label = d_times[i][-5:] if d_times[i] else ''
-            draw.text((ox + 12, sy + 6), day_label, font=fonts['b22'], fill='red' if i == 0 else 'black')
+            draw.text((ox + 12, sy + 6), day_label, font=fonts['b22'], fill='black')
             rain = int(d_rain[i]) if i < len(d_rain) and d_rain[i] is not None else 0
             if rain >= 30:
                 rc = 'red' if rain >= 60 else 'black'

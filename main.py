@@ -18,7 +18,7 @@ import calendar
 import tomllib
 from collections import deque
 from datetime import datetime, timezone, timedelta, date as date_cls
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from logging.handlers import RotatingFileHandler
 
 # --- GMAIL IMPORTS ---
@@ -50,22 +50,18 @@ try:
     ENABLE_CALENDAR    = _w.get('enable_calendar', False)
     ENABLE_TASKS       = _w.get('enable_tasks', False)
     ENABLE_CLAUDE      = _w.get('enable_claude', False)
-    ENABLE_SPOTIFY     = _w.get('enable_spotify', False)
     _loc = _cfg.get('location', {})
     LOCATION_LAT = _loc.get('lat', 44.8240855)
     LOCATION_LON = _loc.get('lon', 20.4934273)
-    _lfm = _cfg.get('lastfm', {})
-    LASTFM_CONF = {'API_KEY': _lfm.get('api_key', ''), 'USERNAME': _lfm.get('username', '')}
     LANGUAGE = _cfg.get('display', {}).get('language', 'en')
     FORECAST_DAYS = _cfg.get('weather', {}).get('forecast_days', 5)
 except FileNotFoundError:
     ENABLE_CALENDAR = False
     ENABLE_TASKS = False
     ENABLE_CLAUDE = False
-    ENABLE_SPOTIFY = False
     LOCATION_LAT = 49.6790190
     LOCATION_LON = 20.5495183
-    LASTFM_CONF = {'API_KEY': '', 'USERNAME': ''}
+
     LANGUAGE = 'en'
     FORECAST_DAYS = 5
 
@@ -87,7 +83,6 @@ API_ENDPOINTS = {
     'air_quality': 'http://air-quality-api.open-meteo.com/v1/air-quality',
     'btc': 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart',
     'eth': 'https://api.coingecko.com/api/v3/coins/ethereum/market_chart',
-    'lastfm': 'http://ws.audioscrobbler.com/2.0/'
 }
 
 # --- FILES & SCOPES ---
@@ -196,7 +191,6 @@ class DataStore:
         self.weather = {}
         self.aqi = 0
         self.gmail_unread = 0
-        self.spotify = {'status': 'PAUSED', 'text': '', 'cover': None}
         self.claude = {'error': False, 'five_hour': {}, 'seven_day': {}}
         self.calendar_events = []
         self.tasks_items = []
@@ -206,7 +200,7 @@ class DataStore:
 
         self.last_update = {
             'weather': 0, 'gmail': 0,
-            'spotify': 0, 'crypto': 0, 'sysload': 0, 'ping': 0,
+            'crypto': 0, 'sysload': 0, 'ping': 0,
             'claude': 0, 'calendar': 0, 'tasks': 0,
             'aqi': 0,
         }
@@ -224,8 +218,6 @@ def get_data_fingerprint(ds):
             ds.weather.get('current', {}).get('weather_code'),
             ds.gmail_unread,
             str(ds.calendar_events),
-            ds.spotify.get('status'),
-            ds.spotify.get('text'),
             ds.claude.get('five_hour', {}).get('utilization'),
             ds.claude.get('seven_day', {}).get('utilization'),
             ds.aqi,
@@ -486,40 +478,6 @@ def update_data_thread():
                 with data_store.lock:
                     data_store.claude['error'] = True
             data_store.last_update['claude'] = now
-
-        if ENABLE_SPOTIFY and now - data_store.last_update['spotify'] > 20:
-            url = f"{API_ENDPOINTS['lastfm']}?method=user.getrecenttracks&user={LASTFM_CONF['USERNAME']}&api_key={LASTFM_CONF['API_KEY']}&format=json&limit=2&rnd={int(now)}"
-            s_data = net.get_json(url, timeout=5)
-            if s_data:
-                try:
-                    tracks = s_data.get('recenttracks', {}).get('track', [])
-                    if isinstance(tracks, dict): tracks = [tracks]
-                    if tracks:
-                        current_track = tracks[0]
-                        is_playing = current_track.get('@attr', {}).get('nowplaying') == 'true'
-                        if is_playing:
-                            track_name = current_track.get('name', 'Unknown')
-                            artist = current_track.get('artist', {}).get('#text', 'Unknown')
-                            img_url = ""
-                            for img in current_track.get('image', []):
-                                if img.get('size') == 'extralarge': img_url = img.get('#text', '')
-                            cover_dithered = None
-                            if img_url:
-                                img_bytes = net.get_image(img_url)
-                                if img_bytes:
-                                    img_pil = Image.open(io.BytesIO(img_bytes)).convert("L").resize((120, 120))
-                                    enhancer = ImageEnhance.Contrast(img_pil)
-                                    img_pil = enhancer.enhance(3.0)
-                                    cover_dithered = img_pil.convert("1", dither=Image.NONE)
-                            with data_store.lock:
-                                data_store.spotify = {'status': 'PLAYING', 'text': f"{artist} - {track_name}",
-                                                      'cover': cover_dithered}
-                        else:
-                            with data_store.lock:
-                                data_store.spotify = {'status': 'PAUSED', 'text': '', 'cover': None}
-                except:
-                    pass
-            data_store.last_update['spotify'] = now
 
         gc.collect()
         new_fp = get_data_fingerprint(data_store)

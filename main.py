@@ -40,6 +40,7 @@ LIB_DIR = os.path.join(BASE_DIR, 'lib')
 FONT_DIR = os.path.join(BASE_DIR, 'fnt')
 ICON_DIR = os.path.join(BASE_DIR, 'icons')
 LOG_FILE = os.path.join(BASE_DIR, 'dashboard.log')
+MESSAGE_FILE = os.path.join(BASE_DIR, 'dashboard_message.json')
 
 # --- LOCAL SETTINGS ---
 _cfg_path = os.path.join(BASE_DIR, 'settings_local.toml')
@@ -831,6 +832,36 @@ def get_weather_icon(code, is_day=1):
     return "icon_sun"
 
 
+def read_message():
+    try:
+        with open(MESSAGE_FILE) as f:
+            msg = json.load(f)
+        ttl = msg.get('ttl', 0)
+        if ttl > 0 and time.time() - msg.get('created_at', 0) > ttl:
+            os.remove(MESSAGE_FILE)
+            return None
+        return msg
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def wrap_text(text, font, max_width):
+    words = text.split()
+    lines = []
+    current = ''
+    for word in words:
+        test = (current + ' ' + word).strip()
+        if font.getlength(test) <= max_width:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
 def moon_phase_index(dt):
     known_new = datetime(2000, 1, 6, 18, 14)
     days = (dt - known_new).total_seconds() / 86400
@@ -1134,90 +1165,34 @@ def render_screen(epd, fonts):
 
     draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)
 
-    # --- COLUMN 3 (Claude/Spotify/Progress, Gmail) ---
+    # --- COLUMN 3 (Custom Message) ---
     col3_x = col_w * 2 + 30
+    col3_w = total_width - col3_x - 10
 
-    # 1. Claude AI OR Spotify OR Time Progress
-    sp_y = 10
-    # Clear background for widget
-    draw.rectangle((col3_x, sp_y, col3_x + 420, sp_y + 130), fill="white")
+    msg = read_message()
+    if msg:
+        bg  = msg.get('bg_color', 'white')
+        tc  = msg.get('text_color', 'black')
+        bc  = msg.get('border_color', '')
 
-    if ENABLE_CLAUDE:
-        draw.text((col3_x, sp_y), STRINGS.get('claude_title', 'CLAUDE AI USAGE'), font=fonts['28'], fill="black")
+        draw.rectangle((col3_x, 10, col3_x + col3_w, 470), fill=bg)
+        if bc:
+            draw.rectangle((col3_x, 10, col3_x + col3_w, 470), outline=bc, width=4)
 
-        if claude.get('error'):
-            draw.text((col3_x, sp_y + 50), STRINGS.get('claude_error', 'Claude Usage Error'), font=fonts['24'], fill="black")
-        else:
-            # 5-Hour Limit
-            pct_5h = claude.get('five_hour', {}).get('utilization', 0)
-            resets_5h = claude.get('five_hour', {}).get('resets_at')
-            rem_5h = time_until(resets_5h)
+        pad = 14
+        y = 20
+        header = msg.get('header', '').strip()
+        if header:
+            draw.text((col3_x + pad, y), header, font=fonts['35'], fill=tc)
+            y += 45
+            draw.line((col3_x + pad, y, col3_x + col3_w - pad, y), fill=tc, width=1)
+            y += 12
 
-            draw.text((col3_x, sp_y + 40), STRINGS.get('claude_5h', '5-Hour Limit: {pct}% (Resets in {time})').format(pct=pct_5h, time=rem_5h), font=fonts['20'], fill="black")
-            bx, bw, bh = col3_x, 400, 15
-            draw.rectangle((bx, sp_y + 65, bx + bw, sp_y + 65 + bh), outline="black", width=2)
-            fill_w = int((bw - 4) * min(pct_5h / 100.0, 1.0))
-            if fill_w > 0: draw.rectangle((bx + 2, sp_y + 67, bx + 2 + fill_w, sp_y + 65 + bh - 2), fill="black")
-
-            # 7-Day Limit
-            pct_7d = claude.get('seven_day', {}).get('utilization', 0)
-            resets_7d = claude.get('seven_day', {}).get('resets_at')
-            rem_7d = time_until(resets_7d)
-
-            draw.text((col3_x, sp_y + 90), STRINGS.get('claude_7d', '7-Day Limit: {pct}% (Resets in {time})').format(pct=pct_7d, time=rem_7d), font=fonts['20'], fill="black")
-            draw.rectangle((bx, sp_y + 115, bx + bw, sp_y + 115 + bh), outline="black", width=2)
-            fill_w = int((bw - 4) * min(pct_7d / 100.0, 1.0))
-            if fill_w > 0: draw.rectangle((bx + 2, sp_y + 117, bx + 2 + fill_w, sp_y + 115 + bh - 2), fill="black")
-
-    elif ENABLE_SPOTIFY:
-        if spotify['cover']:
-            Himage.paste(spotify['cover'], (col3_x, sp_y))
-        else:
-            draw_icon(draw, col3_x, sp_y, "icon_spotify", (120, 120))
-
-        status_ico = "icon_play" if spotify['status'] == 'PLAYING' else "icon_pause"
-        draw_icon(draw, col3_x + 140, sp_y + 10, status_ico, (30, 30))
-
-        if spotify['status'] == 'PLAYING':
-            words = spotify['text'].split(' - ')
-            artist = words[0] if len(words) > 0 else "Unknown"
-            track = words[1] if len(words) > 1 else ""
-            draw.text((col3_x + 180, sp_y + 10), artist[:20], font=fonts['28'], fill="black")
-            draw.text((col3_x + 140, sp_y + 50), track[:25], font=fonts['24'], fill="black")
-
-    else:
-        # Fallback: Time Progress
-        tp_y = sp_y
-        draw.text((col3_x, tp_y), STRINGS.get('time_progress_title', 'TIME PROGRESS'), font=fonts['28'], fill="black")
-
-        day_pct = (dt.hour * 3600 + dt.minute * 60 + dt.second) / 86400.0
-        days_in_m = calendar.monthrange(dt.year, dt.month)[1]
-        month_pct = (dt.day - 1 + (dt.hour / 24.0)) / days_in_m
-        days_in_y = 366 if calendar.isleap(dt.year) else 365
-        year_pct = (dt.timetuple().tm_yday - 1 + (dt.hour / 24.0)) / days_in_y
-
-        def draw_prog(y_offset, label, pct):
-            draw.text((col3_x, tp_y + y_offset), label, font=fonts['24'], fill="black")
-            bx = col3_x + 110
-            bw = 200
-            bh = 20
-            draw.rectangle((bx, tp_y + y_offset + 2, bx + bw, tp_y + y_offset + bh + 2), outline="black", width=2)
-            if pct > 0:
-                fill_w = int((bw - 4) * min(pct, 1.0))
-                if fill_w > 0:
-                    draw.rectangle((bx + 2, tp_y + y_offset + 4, bx + 2 + fill_w, tp_y + y_offset + bh), fill="black")
-            draw.text((bx + bw + 15, tp_y + y_offset), f"{int(pct * 100)}%", font=fonts['24'], fill="black")
-
-        draw_prog(40, STRINGS.get('label_day', 'DAY'), day_pct)
-        draw_prog(75, STRINGS.get('label_month', 'MONTH'), month_pct)
-        draw_prog(110, STRINGS.get('label_year', 'YEAR'), year_pct)
-
-    draw.line((col3_x, 150, total_width - 20, 150), fill="black", width=2)
-
-    # 2. Gmail
-    gm_y = 170
-    draw_icon(draw, col3_x, gm_y, "icon_mail", (60, 60))
-    draw.text((col3_x + 80, gm_y + 10), STRINGS.get('gmail_unread', 'Unread Inbox: {count}').format(count=gmail_unread), font=fonts['35'], fill="black")
+        body = msg.get('body', '').strip()
+        if body:
+            for line in wrap_text(body, fonts['24'], col3_w - pad * 2)[:13]:
+                draw.text((col3_x + pad, y), line, font=fonts['24'], fill=tc)
+                y += 30
 
     return Himage
 

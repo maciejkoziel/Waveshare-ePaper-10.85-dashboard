@@ -1242,6 +1242,11 @@ def main():
     signal.signal(signal.SIGUSR1, refresh_signal_handler)
     epd = None
 
+    # Start data thread early so weather/data loads during EPD init+clear (~17s)
+    t_data = threading.Thread(target=update_data_thread)
+    t_data.daemon = True
+    t_data.start()
+
     try:
         epd = epd10in85g.EPD()
         epd.Init()
@@ -1264,10 +1269,6 @@ def main():
             'cal20': load_font('EncodeSansCondensed-Regular.ttf', 20),
             'cal28': load_font('EncodeSansCondensed-Bold.ttf', 28),
         }
-
-        t_data = threading.Thread(target=update_data_thread)
-        t_data.daemon = True
-        t_data.start()
 
         refresh_counter = 0
         MIN_REFRESH_INTERVAL = 180

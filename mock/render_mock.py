@@ -194,10 +194,10 @@ def render(fs):
            cd, font=fs['small_knock'], fill=YELLOW)
     d.line((bx + 8, by + 34, bx + bw - 8, by + 34), fill='white', width=1)
 
-    big = '14:30'
+    big = '17:00'
     time_w = int(fs['next_time'].getlength(big))
     title_max = bw - 34 - time_w
-    lines = wrap_text('Pick up kids from school', fs['body_knock'], title_max)[:2]
+    lines = wrap_text('Football training', fs['body_knock'], title_max)[:2]
     TIME_H, LINE_H, LABEL_LINE_H = 48, 28, 26
     label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
     block_h = max(TIME_H, label_h)

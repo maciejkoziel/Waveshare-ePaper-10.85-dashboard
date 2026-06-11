@@ -284,12 +284,12 @@ def render(fs):
     top = BAND_H + 10 + (SLOT_H + SLOT_GAP)
     d.rectangle((c3x, top, c3x + c3w, top + SLOT_H), fill=YELLOW)
     d.rectangle((c3x, top, c3x + c3w, top + SLOT_H), outline='red', width=4)
-    d.text((c3x + 16, top + 10), 'ALERT', font=fs['strong'], fill='black')
+    d.text((c3x + 16, top + 10), 'PRINTER', font=fs['strong'], fill='black')
     ago = '3m ago'
     d.text((c3x + c3w - 16 - fs['small'].getlength(ago), top + 14),
            ago, font=fs['small'], fill='black')
     d.line((c3x + 16, top + 44, c3x + c3w - 16, top + 44), fill='black', width=1)
-    d.text((c3x + 16, top + 54), 'Dinner is ready!', font=fs['body22'], fill='black')
+    d.text((c3x + 16, top + 54), 'Black ink low (12%)', font=fs['body22'], fill='black')
 
     # --- FORECAST STRIP ---
     sy = 390

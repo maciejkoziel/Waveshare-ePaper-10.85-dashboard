@@ -52,11 +52,10 @@ sudo apt install python3-pip python3-pil python3-numpy git -y
 
 ```bash
 pip3 install --break-system-packages requests Pillow \
-  google-api-python-client google-auth-httplib2 google-auth-oauthlib \
-  aiomqtt roborock
+  google-api-python-client google-auth-httplib2 google-auth-oauthlib
 ```
 
-> `bambulabs_api` is bundled in `lib/`. The G-display driver (`epd10in85g` + `epdconfig_g`) is also bundled in `lib/waveshare_epd/`.
+> The G-display driver (`epd10in85g` + `epdconfig_g`) is bundled in `lib/waveshare_epd/`.
 
 ### 3. Clone and Install
 
@@ -89,7 +88,6 @@ All config lives in `settings_local.toml` in the project directory (not committe
 [widgets]
 enable_tasks    = false
 enable_claude   = false
-enable_spotify  = false
 enable_calendar = false
 
 [location]
@@ -106,9 +104,10 @@ language = "en"     # "en" or "pl"
 port = 5000         # port for the custom message HTTP server
 ```
 
-### Google (Gmail / Calendar / Tasks)
-These three share a single OAuth flow:
-1. In Google Cloud Console: create a project, enable the Gmail API, Google Calendar API, and Google Tasks API.
+### Google (Calendar / Tasks)
+Calendar and Tasks share a single OAuth flow. Gmail unread count is also fetched but not currently rendered.
+
+1. In Google Cloud Console: create a project, enable the Google Calendar API and Google Tasks API (and Gmail API if desired).
 2. Create OAuth 2.0 credentials (Desktop App) and download the JSON as `credentials.json` in the project directory.
 3. **Before starting the service**, run `python3 main.py` once in a terminal — it will print an authorization URL.
 4. Open the URL in a browser, authorize, and paste the redirect URL back. Tokens saved to `token.json`.

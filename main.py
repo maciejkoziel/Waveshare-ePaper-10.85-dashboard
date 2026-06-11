@@ -1222,7 +1222,7 @@ def render_screen(epd, fonts):
         created_at = msg.get('created_at')
         if created_at:
             ago = time_ago(created_at)
-            draw.text((col3_x + pad, slot_bot - border - 20 - 6), ago, font=fonts['18'], fill=tc)
+            draw.text((col3_x + pad, slot_bot - border - 22 - 6), ago, font=fonts['20'], fill=tc)
 
     return Himage
 

@@ -395,22 +395,27 @@ def update_data_thread():
                         ).execute()
                         for ev in result.get('items', []):
                             start = ev['start'].get('dateTime', ev['start'].get('date', ''))
+                            end   = ev['end'].get('dateTime', ev['end'].get('date', ''))
                             is_allday = 'T' not in start
                             try:
                                 if is_allday:
                                     dt_ev = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=timezone.utc)
                                     event_date = datetime.strptime(start, '%Y-%m-%d').date()
+                                    dt_end = None
                                 else:
                                     dt_ev = datetime.fromisoformat(start.replace('Z', '+00:00'))
                                     event_date = dt_ev.astimezone().date()
+                                    dt_end = datetime.fromisoformat(end.replace('Z', '+00:00')) if end else None
                             except Exception:
                                 dt_ev = datetime.now(timezone.utc)
                                 event_date = dt_ev.date()
                                 is_allday = True
+                                dt_end = None
                             all_events.append({
                                 'title': ev.get('summary', '?'),
                                 'calendar': cal_type,
                                 'dt': dt_ev,
+                                'dt_end': dt_end,
                                 'event_date': event_date,
                                 'allday': is_allday,
                             })
@@ -746,50 +751,78 @@ def draw_next_event_card(draw, fonts, x, w, top, h, ev, now_utc, today_date):
 
 def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
     draw.rectangle((x, y, x + w, y + 108), fill='black')
-    draw.text((x + 12, y + 8), STRINGS.get('next_title', 'NEXT'), font=fonts['b22'], fill='yellow')
-    if ev.get('allday'):
-        delta = (ev['event_date'] - today_date).days
-        if delta == 0:
-            big = STRINGS.get('calendar_today', 'today').upper()
-        elif delta == 1:
-            big = STRINGS.get('calendar_tomorrow', 'tomorrow').upper()
-        else:
-            big = f"+{delta}d"
-        countdown = ''
+    tc = 'yellow' if ev.get('calendar') == 'family' else 'white'
+    dt_end = ev.get('dt_end')
+    ongoing = (not ev.get('allday')
+               and ev['dt'] <= now_utc
+               and dt_end is not None
+               and now_utc < dt_end)
+    if ongoing:
+        header = STRINGS.get('current_title', 'NOW')
+        draw.text((x + 12, y + 8), header, font=fonts['b22'], fill='yellow')
+        draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
+        t_start = ev['dt'].astimezone().strftime('%H:%M')
+        t_end   = dt_end.astimezone().strftime('%H:%M')
+        TIME_LINE_H = 30   # b26 line height
+        time_block_h = TIME_LINE_H * 2
+        time_font = fonts['b26']
+        time_w = int(time_font.getlength(t_start))
+        title_max_w = w - 34 - time_w
+        lines = wrap_text(ev['title'], fonts['r22'], title_max_w)[:2]
+        LINE_H, LABEL_LINE_H = 28, 26
+        label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
+        block_h = max(time_block_h, label_h)
+        block_y = y + 36 + (68 - block_h) // 2
+        time_y  = block_y + (block_h - time_block_h) // 2
+        title_y = block_y + (block_h - label_h) // 2
+        draw.text((x + 12, time_y),                 t_start, font=time_font, fill=tc)
+        draw.text((x + 12, time_y + TIME_LINE_H),   t_end,   font=time_font, fill=tc)
+        tx = x + 12 + time_w + 10
+        for i, line in enumerate(lines):
+            draw.text((tx, title_y + i * LINE_H), line, font=fonts['r22'], fill=tc)
     else:
-        big = ev['dt'].astimezone().strftime('%H:%M')
-        secs = (ev['dt'] - now_utc).total_seconds()
-        if secs < 0:
+        draw.text((x + 12, y + 8), STRINGS.get('next_title', 'NEXT'), font=fonts['b22'], fill='yellow')
+        if ev.get('allday'):
+            delta = (ev['event_date'] - today_date).days
+            if delta == 0:
+                big = STRINGS.get('calendar_today', 'today').upper()
+            elif delta == 1:
+                big = STRINGS.get('calendar_tomorrow', 'tomorrow').upper()
+            else:
+                big = f"+{delta}d"
             countdown = ''
         else:
-            mins = int(secs // 60)
-            days, rem = divmod(mins, 1440)
-            hours, minutes = divmod(rem, 60)
-            if days > 0:
-                countdown = STRINGS.get('next_in_dh', 'in {days}d {hours}h').format(days=days, hours=hours)
-            elif hours > 0:
-                countdown = STRINGS.get('next_in_hm', 'in {hours}h {minutes}m').format(hours=hours, minutes=minutes)
+            big = ev['dt'].astimezone().strftime('%H:%M')
+            secs = (ev['dt'] - now_utc).total_seconds()
+            if secs < 0:
+                countdown = ''
             else:
-                countdown = STRINGS.get('next_in_m', 'in {minutes}m').format(minutes=minutes)
-    if countdown:
-        draw.text((x + w - 12 - int(fonts['r20'].getlength(countdown)), y + 10),
-                  countdown, font=fonts['r20'], fill='yellow')
-    draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
-    tc = 'yellow' if ev.get('calendar') == 'family' else 'white'
-    time_w = int(fonts['b36'].getlength(big))
-    title_max_w = w - 34 - time_w  # x+12 + time_w + 10 gap + 12 right pad
-    lines = wrap_text(ev['title'], fonts['r22'], title_max_w)[:2]
-    TIME_H, LINE_H, LABEL_LINE_H = 40, 28, 26  # b36 height, r22 row pitch, r22 text height
-    label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
-    block_h = max(TIME_H, label_h)
-    # center the block in the 68px content area (y+36 to y+104)
-    block_y = y + 36 + (68 - block_h) // 2
-    time_y = block_y + (block_h - TIME_H) // 2
-    title_y = block_y + (block_h - label_h) // 2
-    draw.text((x + 12, time_y), big, font=fonts['b36'], fill=tc)
-    tx = x + 12 + time_w + 10
-    for i, line in enumerate(lines):
-        draw.text((tx, title_y + i * LINE_H), line, font=fonts['r22'], fill=tc)
+                mins = int(secs // 60)
+                days, rem = divmod(mins, 1440)
+                hours, minutes = divmod(rem, 60)
+                if days > 0:
+                    countdown = STRINGS.get('next_in_dh', 'in {days}d {hours}h').format(days=days, hours=hours)
+                elif hours > 0:
+                    countdown = STRINGS.get('next_in_hm', 'in {hours}h {minutes}m').format(hours=hours, minutes=minutes)
+                else:
+                    countdown = STRINGS.get('next_in_m', 'in {minutes}m').format(minutes=minutes)
+        if countdown:
+            draw.text((x + w - 12 - int(fonts['r20'].getlength(countdown)), y + 10),
+                      countdown, font=fonts['r20'], fill='yellow')
+        draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
+        time_w = int(fonts['b36'].getlength(big))
+        title_max_w = w - 34 - time_w
+        lines = wrap_text(ev['title'], fonts['r22'], title_max_w)[:2]
+        TIME_H, LINE_H, LABEL_LINE_H = 40, 28, 26
+        label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
+        block_h = max(TIME_H, label_h)
+        block_y = y + 36 + (68 - block_h) // 2
+        time_y  = block_y + (block_h - TIME_H) // 2
+        title_y = block_y + (block_h - label_h) // 2
+        draw.text((x + 12, time_y), big, font=fonts['b36'], fill=tc)
+        tx = x + 12 + time_w + 10
+        for i, line in enumerate(lines):
+            draw.text((tx, title_y + i * LINE_H), line, font=fonts['r22'], fill=tc)
 
 
 def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):

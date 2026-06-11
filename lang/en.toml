@@ -24,6 +24,7 @@ claude_reset    = "reset {time}"
 # Masthead / col3 cards
 masthead_date = "{weekday}, {month} {day}"
 next_title    = "NEXT"
+current_title = "NOW"
 next_in_m     = "in {minutes}m"
 next_in_hm    = "in {hours}h {minutes}m"
 next_in_dh    = "in {days}d {hours}h"

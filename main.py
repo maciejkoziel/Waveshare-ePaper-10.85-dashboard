@@ -1207,8 +1207,15 @@ def render_screen(epd, fonts):
         pad = 14
         y = slot_top + 8
         header = msg.get('header', '').strip()
-        if header:
-            draw.text((col3_x + pad, y), header, font=fonts['28'], fill=tc)
+        created_at = msg.get('created_at')
+
+        if header or created_at:
+            if header:
+                draw.text((col3_x + pad, y), header, font=fonts['28'], fill=tc)
+            if created_at:
+                ago = time_ago(created_at)
+                ago_w = fonts['20'].getlength(ago)
+                draw.text((col3_x + col3_w - pad - ago_w, y + 6), ago, font=fonts['20'], fill=tc)
             y += 36
             draw.line((col3_x + pad, y, col3_x + col3_w - pad, y), fill=tc, width=1)
             y += 8
@@ -1218,11 +1225,6 @@ def render_screen(epd, fonts):
             for line in wrap_text(body, fonts['20'], col3_w - pad * 2)[:2]:
                 draw.text((col3_x + pad, y), line, font=fonts['20'], fill=tc)
                 y += 26
-
-        created_at = msg.get('created_at')
-        if created_at:
-            ago = time_ago(created_at)
-            draw.text((col3_x + pad, slot_bot - border - 22 - 6), ago, font=fonts['20'], fill=tc)
 
     return Himage
 

@@ -818,7 +818,7 @@ def render_screen(epd, fonts):
     c3w = total_width - c3x - 12
     mid_x = rail_w + 24
     mid_w = c3x - 24 - mid_x
-    MID_FLOOR = 336
+    MID_FLOOR = 382
     row_h = 33
 
     # --- MASTHEAD (full-width black band) ---
@@ -875,32 +875,32 @@ def render_screen(epd, fonts):
         is_day = cur.get('is_day', 1)
 
         ry = BAND_H + 14
-        draw_icon(draw, 20, ry + 4, get_weather_icon(w_code, is_day), (100, 100))
+        draw_icon(draw, 20, ry + 2, get_weather_icon(w_code, is_day), (70, 70))
         temp_s = f"{math.floor(temp + 0.5)}°"
-        draw.text((130, ry - 6), temp_s, font=fonts['b96'], fill='black')
+        draw.text((104, ry), temp_s, font=fonts['b52'], fill='black')
 
-        uvx = max(290, 130 + int(fonts['b96'].getlength(temp_s)) + 14)
-        uvy = ry + 6
-        draw.text((uvx, uvy), 'UV', font=fonts['r24'], fill='black')
+        uvx = max(220, 104 + int(fonts['b52'].getlength(temp_s)) + 14)
+        uvy = ry + 4
+        draw.text((uvx, uvy), 'UV', font=fonts['r20'], fill='black')
         uv_rounded = math.floor(cur.get('uv_index', 0.0) + 0.5)
         if uv_rounded >= 6:
-            draw.rectangle((uvx - 6, uvy + 28, uvx + 58, uvy + 90), fill='red')
-            draw.text((uvx + 6, uvy + 30), str(uv_rounded), font=fonts['b52'], fill='white')
+            draw.rectangle((uvx - 4, uvy + 22, uvx + 44, uvy + 64), fill='red')
+            draw.text((uvx + 4, uvy + 24), str(uv_rounded), font=fonts['b36'], fill='white')
         else:
-            draw.text((uvx + 2, uvy + 26), str(uv_rounded), font=fonts['b52'], fill='black')
+            draw.text((uvx + 2, uvy + 20), str(uv_rounded), font=fonts['b36'], fill='black')
 
-        ly = ry + 124
+        ly = ry + 90
         draw.text((20, ly), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum),
-                  font=fonts['r26'], fill='black')
-        draw.text((20, ly + 38), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=round(pres)),
-                  font=fonts['r26'], fill='black')
+                  font=fonts['r24'], fill='black')
+        draw.text((20, ly + 36), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=round(pres)),
+                  font=fonts['r24'], fill='black')
         wind_spd = cur.get('wind_speed_10m', 0)
         wind_deg = cur.get('wind_direction_10m', 0)
-        draw_icon(draw, 20, ly + 76, 'icon_wind', (28, 28))
-        draw.text((56, ly + 76), f"{math.floor(wind_spd + 0.5)} km/h {wind_dir_label(wind_deg)}",
-                  font=fonts['r26'], fill='black')
+        draw_icon(draw, 20, ly + 72, 'icon_wind', (26, 26))
+        draw.text((52, ly + 72), f"{math.floor(wind_spd + 0.5)} km/h {wind_dir_label(wind_deg)}",
+                  font=fonts['r24'], fill='black')
 
-    draw.line((rail_w + 8, BAND_H + 14, rail_w + 8, 330), fill='black', width=1)
+    draw.line((rail_w + 8, BAND_H + 14, rail_w + 8, MID_FLOOR), fill='black', width=1)
 
     # --- MIDDLE (calendar + tasks, flow layout) ---
     y = BAND_H + 12
@@ -960,16 +960,12 @@ def render_screen(epd, fonts):
         d_tmin = daily.get('temperature_2m_min', [])
         d_codes = daily.get('weather_code', [])
         d_rain = daily.get('precipitation_probability_max', [])
-        sy = 344
+        sy = 390
         draw.line((20, sy, c3x - 24, sy), fill='black', width=1)
         n_days = min(FORECAST_DAYS, len(d_times))
         strip_w = c3x - 24 - 20
         cell_w = strip_w // max(n_days, 1)
-        compact = cell_w < 165
-        icon_sz = 50 if compact else 66
-        f_day = fonts['b22'] if compact else fonts['b26']
-        f_hi = fonts['b28'] if compact else fonts['b36']
-        f_lo = fonts['r22'] if compact else fonts['r26']
+        icon_sz = 40
         for i in range(n_days):
             ox = 20 + i * cell_w
             try:
@@ -977,21 +973,21 @@ def render_screen(epd, fonts):
                 day_label = weekdays_list[day_dt.weekday()]
             except Exception:
                 day_label = d_times[i][-5:] if d_times[i] else ''
-            draw.text((ox + 14, sy + 8), day_label, font=f_day, fill='red' if i == 0 else 'black')
+            draw.text((ox + 12, sy + 6), day_label, font=fonts['b22'], fill='red' if i == 0 else 'black')
             rain = int(d_rain[i]) if i < len(d_rain) and d_rain[i] is not None else 0
             if rain >= 30:
                 rc = 'red' if rain >= 60 else 'black'
                 rain_s = f"{rain}%"
-                px = ox + cell_w - 14 - fonts['b22'].getlength(rain_s)
-                draw_drop(draw, int(px - 18), sy + 14, 13, fill=rc)
-                draw.text((px, sy + 10), rain_s, font=fonts['b22'], fill=rc)
-            draw_icon(draw, ox + 14, sy + 46,
+                px = ox + cell_w - 12 - fonts['b22'].getlength(rain_s)
+                draw_drop(draw, int(px - 16), sy + 10, 11, fill=rc)
+                draw.text((px, sy + 8), rain_s, font=fonts['b22'], fill=rc)
+            draw_icon(draw, ox + 12, sy + 32,
                       get_weather_icon(d_codes[i] if i < len(d_codes) else 0, 1), (icon_sz, icon_sz))
-            tx = ox + 14 + icon_sz + 12
+            tx = ox + 12 + icon_sz + 8
             tmax = math.floor(d_tmax[i] + 0.5) if i < len(d_tmax) else 0
             tmin = math.floor(d_tmin[i] + 0.5) if i < len(d_tmin) else 0
-            draw.text((tx, sy + 44), f"{tmax}°", font=f_hi, fill='black')
-            draw.text((tx, sy + 88), f"{tmin}°", font=f_lo, fill='black')
+            draw.text((tx, sy + 32), f"{tmax}°", font=fonts['b28'], fill='black')
+            draw.text((tx, sy + 60), f"{tmin}°", font=fonts['r22'], fill='black')
 
     # --- COLUMN 3 (messages preempt fallback cards top-down) ---
     draw.line((c3x - 12, BAND_H + 10, c3x - 12, 470), fill='black', width=1)

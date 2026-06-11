@@ -1,7 +1,6 @@
 # Waveshare-ePaper-10.85 Dashboard
 
-> **Fork of [czuryk/Waveshare-ePaper-10.85-dashboard](https://github.com/czuryk/Waveshare-ePaper-10.85-dashboard)**  
-> Extended to support the **4-color (G) variant** of the display, running on a **Raspberry Pi Zero W**.
+> Originally forked from [czuryk/Waveshare-ePaper-10.85-dashboard](https://github.com/czuryk/Waveshare-ePaper-10.85-dashboard), but has since diverged significantly — different hardware (4-color G panel), rewritten display driver, new layout, and additional data sources. Little of the original code remains.
 
 A fully functional E-ink dashboard running on a Raspberry Pi. Designed for the Waveshare 10.85" e-Paper display, this project aggregates essential daily information and smart home status into a clean, minimalist interface.
 

@@ -1,27 +1,5 @@
 # Polish display strings
 
-# Strava
-strava_title      = "STATYSTYKI STRAVA"
-strava_year_stats = "{year}: {dist} km | {prev_year}: {prev_dist} km"
-strava_total      = "Razem: {dist} km | {rides} aktywności"
-
-# System load
-sysload_title = "OBCIĄŻENIE: {cpu}%"
-ram_free      = "RAM wolne: {mb} MB"
-
-# Printer
-printer_title = "DRUKARKA: {status}"
-
-# Roborock
-roborock_battery  = "Bat: {bat}% | {status}"
-roborock_cleaning = "Sprzątanie: {area} m2 ({pct}%)"
-roborock_last     = "Ost: {date} | {area} m2"
-
-# Antigravity
-antigravity_title  = "UŻYCIE ANTIGRAVITY"
-antigravity_model  = "{label} {pct}% | Za {time}"
-error_loading_data = "Błąd ładowania"
-
 # Internet
 internet_quality = "Internet: {ms} ms"
 

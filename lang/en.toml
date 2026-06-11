@@ -1,27 +1,5 @@
 # English display strings
 
-# Strava
-strava_title      = "STRAVA STATS"
-strava_year_stats = "{year}: {dist} km | {prev_year}: {prev_dist} km"
-strava_total      = "Total: {dist} km | {rides} acts"
-
-# System load
-sysload_title = "SYSTEM LOAD: {cpu}%"
-ram_free      = "RAM Free: {mb} MB"
-
-# Printer
-printer_title = "PRINTER: {status}"
-
-# Roborock
-roborock_battery  = "Bat: {bat}% | {status}"
-roborock_cleaning = "Clean: {area} m2 ({pct}%)"
-roborock_last     = "Last: {date} | {area} m2"
-
-# Antigravity
-antigravity_title  = "ANTIGRAVITY USAGE"
-antigravity_model  = "{label} {pct}% | In {time}"
-error_loading_data = "Error loading data"
-
 # Internet
 internet_quality = "Internet Quality: {ms} ms"
 

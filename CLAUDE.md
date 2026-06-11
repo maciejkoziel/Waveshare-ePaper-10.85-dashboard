@@ -215,10 +215,9 @@ Display still takes ~21s to physically update after signal.
 main.py              # Main script — widget logic, rendering, main loop
 message_server.py    # Standalone HTTP server for col3 custom message widget (port 5000)
 claude.py            # Claude Code usage data fetcher
-antigravity.py       # Antigravity usage data fetcher
 lib/
   waveshare_epd/     # Display drivers: epd10in85g.py + epdconfig_g.py (active), epd10in85.py (unused)
-  bambulabs_api/     # Bundled Bambu Lab printer API
+  bambulabs_api/     # Bundled Bambu Lab printer API (unused — Bambu widget removed 2026-06)
 fnt/                 # Fonts (see Font Notes below)
 icons/               # BMP icons for widgets
 lang/                # i18n strings: en.toml, pl.toml
@@ -226,18 +225,15 @@ dashboard.log        # Rotating log (1 MB max, 1 backup)
 ```
 
 Credential/token files (not in repo, created on first run):
-- `strava_token.json` — Strava OAuth tokens
 - `token.json` — Gmail OAuth token
 - `credentials.json` — Gmail OAuth client credentials (must be placed manually)
-- `roborock_session.pkl` — Roborock session
-- `roborock_stats.json` — Roborock stats cache
 - `claude_creds.json` — Claude Code OAuth tokens
 - `dashboard_message.json` — current custom message for col3 (written by message_server.py)
 
 ## Architecture
 
 **Multi-threaded, change-driven refresh:**
-- Background threads fetch data per-service (`update_data_thread`, `roborock_update_thread`)
+- Background thread fetches data per-service (`update_data_thread`)
 - Main loop renders on data change with `MIN_REFRESH_INTERVAL = 180` s rate-limit
 - Hardware watchdog via `signal.alarm(90)` — hangs trigger `os.execv` self-restart
 - Icon cache (`icon_cache` dict) prevents repeated disk reads
@@ -262,17 +258,13 @@ Controlled via `settings_local.toml` on Pi (not in repo):
 
 ```toml
 [widgets]
-enable_strava      = false
-enable_bambu       = false
-enable_roborock    = false
-enable_antigravity = false
 enable_tasks       = true
 enable_claude      = true
 enable_spotify     = false
 enable_calendar    = true
 ```
 
-Middle column: calendar (or Bambu if calendar off) + tasks (or Antigravity if tasks off). Strava (if on) renders compact above calendar. Left rail always weather. Col3: messages preempt fallback cards (next event, Claude usage).
+Middle column: calendar + tasks. Left rail always weather. Col3: messages preempt fallback cards (next event, Claude usage). Strava/Bambu/Roborock/Antigravity widgets removed 2026-06 — old toggles in `settings_local.toml` are ignored. Spotify fetch exists but is not rendered in the current layout.
 
 ## Font Notes
 
@@ -410,8 +402,8 @@ State persists across restarts in `dashboard_message.json` (JSON array of up to 
 All already installed:
 - `pillow`, `numpy`, `requests`, `flask`, `spidev`, `gpiod`, `gpiozero`, `rpi-lgpio`
 - `google-api-python-client`, `google-auth-*` (Gmail)
-- `aiomqtt`, `roborock` (Roborock)
-- `bambulabs_api` — bundled in `lib/`
+- `aiomqtt`, `roborock` (installed, no longer used)
+- `bambulabs_api` — bundled in `lib/` (no longer used)
 
 To add a new pip dependency:
 ```bash

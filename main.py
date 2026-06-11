@@ -15,7 +15,6 @@ import json
 import subprocess
 import math
 import calendar
-import urllib.parse
 import tomllib
 from collections import deque
 from datetime import datetime, timezone, timedelta, date as date_cls
@@ -48,33 +47,24 @@ try:
     with open(_cfg_path, 'rb') as _f:
         _cfg = tomllib.load(_f)
     _w = _cfg.get('widgets', {})
-    ENABLE_STRAVA      = _w.get('enable_strava', False)
-    ENABLE_BAMBU       = _w.get('enable_bambu', False)
     ENABLE_CALENDAR    = _w.get('enable_calendar', False)
-    ENABLE_ANTIGRAVITY = _w.get('enable_antigravity', False)
     ENABLE_TASKS       = _w.get('enable_tasks', False)
     ENABLE_CLAUDE      = _w.get('enable_claude', False)
     ENABLE_SPOTIFY     = _w.get('enable_spotify', False)
     _loc = _cfg.get('location', {})
     LOCATION_LAT = _loc.get('lat', 44.8240855)
     LOCATION_LON = _loc.get('lon', 20.4934273)
-    _p = _cfg.get('printer', {})
-    PRINTER_CONF = {'IP': _p.get('ip', ''), 'SERIAL': _p.get('serial', ''), 'ACCESS_CODE': _p.get('access_code', '')}
     _lfm = _cfg.get('lastfm', {})
     LASTFM_CONF = {'API_KEY': _lfm.get('api_key', ''), 'USERNAME': _lfm.get('username', '')}
     LANGUAGE = _cfg.get('display', {}).get('language', 'en')
     FORECAST_DAYS = _cfg.get('weather', {}).get('forecast_days', 5)
 except FileNotFoundError:
-    ENABLE_STRAVA = False
-    ENABLE_BAMBU = False
     ENABLE_CALENDAR = False
-    ENABLE_ANTIGRAVITY = False
     ENABLE_TASKS = False
     ENABLE_CLAUDE = False
     ENABLE_SPOTIFY = False
     LOCATION_LAT = 49.6790190
     LOCATION_LON = 20.5495183
-    PRINTER_CONF = {'IP': '', 'SERIAL': '', 'ACCESS_CODE': ''}
     LASTFM_CONF = {'API_KEY': '', 'USERNAME': ''}
     LANGUAGE = 'en'
     FORECAST_DAYS = 5
@@ -95,16 +85,9 @@ except FileNotFoundError:
 API_ENDPOINTS = {
     'weather': 'http://api.open-meteo.com/v1/forecast',
     'air_quality': 'http://air-quality-api.open-meteo.com/v1/air-quality',
-    'strava_token': 'https://www.strava.com/oauth/token',
-    'strava_auth': 'https://www.strava.com/oauth/authorize',
-    'strava_activities': 'https://www.strava.com/api/v3/athlete/activities',
     'btc': 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart',
     'eth': 'https://api.coingecko.com/api/v3/coins/ethereum/market_chart',
     'lastfm': 'http://ws.audioscrobbler.com/2.0/'
-}
-
-STRAVA_CONF = {
-    'TOKEN_FILE': os.path.join(BASE_DIR, 'strava_token.json')
 }
 
 # --- FILES & SCOPES ---
@@ -123,12 +106,10 @@ if os.path.exists(LIB_DIR):
 
 try:
     import epd10in85g
-    import bambulabs_api as bl
 except ImportError:
     pass
 
 # --- LOGGING ---
-logging.getLogger("bambulabs_api").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 
 logger = logging.getLogger()
@@ -145,7 +126,6 @@ logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
 icon_cache = {}
-global_printer = None
 refresh_event = threading.Event()
 
 
@@ -215,17 +195,9 @@ class DataStore:
         self.lock = threading.Lock()
         self.weather = {}
         self.aqi = 0
-        self.strava = {
-            'rides': 0, 'total_distance': 0,
-            'rides_curr': 0, 'distance_curr': 0,
-            'rides_prev': 0, 'distance_prev': 0,
-            'bike_total': 0, 'hike_total': 0
-        }
-        self.printer = {'status': 'OFFLINE'}
         self.gmail_unread = 0
         self.spotify = {'status': 'PAUSED', 'text': '', 'cover': None}
         self.claude = {'error': False, 'five_hour': {}, 'seven_day': {}}
-        self.antigravity = {'error': False, 'models': []}
         self.calendar_events = []
         self.tasks_items = []
         self.sysload = {'cpu': 0, 'ram_free': 0, 'history': deque(maxlen=30)}
@@ -233,9 +205,9 @@ class DataStore:
         self.ping = {'current': 0, 'history': deque(maxlen=50)}
 
         self.last_update = {
-            'weather': 0, 'strava': 0, 'printer': 0, 'gmail': 0,
+            'weather': 0, 'gmail': 0,
             'spotify': 0, 'crypto': 0, 'sysload': 0, 'ping': 0,
-            'claude': 0, 'antigravity': 0, 'calendar': 0, 'tasks': 0,
+            'claude': 0, 'calendar': 0, 'tasks': 0,
             'aqi': 0,
         }
         self.data_changed = threading.Event()
@@ -251,13 +223,11 @@ def get_data_fingerprint(ds):
             ds.weather.get('current', {}).get('temperature_2m'),
             ds.weather.get('current', {}).get('weather_code'),
             ds.gmail_unread,
-            ds.printer.get('status'),
             str(ds.calendar_events),
             ds.spotify.get('status'),
             ds.spotify.get('text'),
             ds.claude.get('five_hour', {}).get('utilization'),
             ds.claude.get('seven_day', {}).get('utilization'),
-            str(ds.antigravity.get('models', [])),
             ds.aqi,
             str(ds.tasks_items),
             str(ds.weather.get('daily', {}).get('precipitation_probability_max')),
@@ -273,18 +243,6 @@ def fetch_with_retry(url, retries=3, delay=5, timeout=10):
         if attempt < retries - 1:
             time.sleep(delay)
     return None
-
-
-def ping_printer(ip):
-    try:
-        result = subprocess.run(
-            ['ping', '-c', '1', '-W', '1', ip],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        return result.returncode == 0
-    except:
-        return False
 
 
 def get_cached_icon(name, size, is_white=False):
@@ -338,85 +296,6 @@ def auth_claude():
         ENABLE_CLAUDE = False
 
 
-def auth_antigravity():
-    global ENABLE_ANTIGRAVITY
-    if not ENABLE_ANTIGRAVITY: return
-    try:
-        import antigravity
-        success = antigravity.interactive_auth()
-        if not success:
-            ENABLE_ANTIGRAVITY = False
-            print("Antigravity widget is disabled.")
-    except ImportError:
-        print("antigravity.py not found. Antigravity widget disabled.")
-        ENABLE_ANTIGRAVITY = False
-
-
-def auth_strava():
-    global ENABLE_STRAVA
-    if not ENABLE_STRAVA: return
-
-    if os.path.exists(STRAVA_CONF['TOKEN_FILE']):
-        return
-
-    print("\n--- STRAVA CONFIGURATION REQUIRED ---")
-    c_id = input("Enter Strava Client ID (or press Enter to disable): ").strip()
-    if not c_id:
-        print("Strava is disabled. Fallback widget (System Load) will be used.\n")
-        ENABLE_STRAVA = False
-        return
-
-    c_secret = input("Enter Strava Client Secret: ").strip()
-
-    auth_url = (
-        f"{API_ENDPOINTS['strava_auth']}?"
-        f"client_id={c_id}&"
-        f"response_type=code&"
-        f"redirect_uri=http://localhost&"
-        f"approval_prompt=force&"
-        f"scope=activity:read_all"
-    )
-
-    print("\n[!] To get a token with the correct permissions, open this link in your browser:\n")
-    print(f"--> {auth_url} <--\n")
-    print("Click 'Authorize'. You will be redirected to an empty/error page (localhost).")
-    print("Look at the address bar. Copy the 'code' parameter.")
-
-    code_input = input("Enter the 'code' from the URL (or paste the full URL): ").strip()
-
-    if not code_input:
-        print("Authorization cancelled. Strava is disabled.\n")
-        ENABLE_STRAVA = False
-        return
-
-    if 'code=' in code_input:
-        try:
-            parsed = urllib.parse.urlparse(code_input)
-            params = urllib.parse.parse_qs(parsed.query)
-            code = params.get('code', [code_input])[0]
-        except:
-            code = code_input.split('code=')[1].split('&')[0]
-    else:
-        code = code_input
-
-    print("Fetching Access Token...")
-    data = {'client_id': c_id, 'client_secret': c_secret, 'code': code, 'grant_type': 'authorization_code'}
-
-    try:
-        resp = requests.post(API_ENDPOINTS['strava_token'], data=data)
-        resp.raise_for_status()
-        token_data = resp.json()
-        token_data['client_id'] = c_id
-        token_data['client_secret'] = c_secret
-
-        with open(STRAVA_CONF['TOKEN_FILE'], 'w') as f:
-            json.dump(token_data, f, indent=4)
-        print("Strava Authorization Successful!\n")
-    except Exception as e:
-        print(f"Failed to fetch Strava tokens: {e}")
-        ENABLE_STRAVA = False
-
-
 def auth_google():
     if os.path.exists(GMAIL_TOKEN_PATH):
         try:
@@ -451,94 +330,7 @@ def auth_google():
         print(f"Google auth failed: {e}")
 
 
-def fetch_strava_data():
-    if not os.path.exists(STRAVA_CONF['TOKEN_FILE']): return None
-    with open(STRAVA_CONF['TOKEN_FILE'], 'r') as f:
-        token_data = json.load(f)
-
-    c_id = token_data.get('client_id')
-    c_secret = token_data.get('client_secret')
-
-    if time.time() > token_data.get('expires_at', 0):
-        data = {'client_id': c_id, 'client_secret': c_secret, 'grant_type': 'refresh_token',
-                'refresh_token': token_data.get('refresh_token')}
-        new_token = net.get_json(API_ENDPOINTS['strava_token'], data=data, method='POST')
-        if new_token and 'access_token' in new_token:
-            new_token['client_id'] = c_id
-            new_token['client_secret'] = c_secret
-            token_data = new_token
-            with open(STRAVA_CONF['TOKEN_FILE'], 'w') as f:
-                json.dump(token_data, f, indent=4)
-        else:
-            return None
-
-    access_token = token_data['access_token']
-
-    now_year = datetime.now().year
-    start_curr_ts = datetime(now_year, 1, 1).timestamp()
-    start_prev_ts = datetime(now_year - 1, 1, 1).timestamp()
-    end_prev_ts = datetime(now_year - 1, 12, 31, 23, 59, 59).timestamp()
-
-    page = 1
-    total_rides, total_dist = 0, 0
-    rides_curr, dist_curr = 0, 0
-    rides_prev, dist_prev = 0, 0
-    bike_total, hike_total = 0, 0
-
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    while True:
-        url = f"{API_ENDPOINTS['strava_activities']}?page={page}&per_page=100"
-        activities = net.get_json(url, headers=headers)
-        if not activities: break
-
-        for act in activities:
-            t = act.get('type')
-            d = act.get('distance', 0)
-            act_time = datetime.strptime(act['start_date'], "%Y-%m-%dT%H:%M:%SZ").timestamp()
-
-            if t in ['Ride', 'VirtualRide', 'EBikeRide', 'GravelRide', 'MountainBikeRide']:
-                total_rides += 1
-                total_dist += d
-                bike_total += d
-                if act_time >= start_curr_ts:
-                    rides_curr += 1
-                    dist_curr += d
-                elif start_prev_ts <= act_time <= end_prev_ts:
-                    rides_prev += 1
-                    dist_prev += d
-            elif t in ['Hike', 'Walk']:
-                hike_total += d
-
-        if len(activities) < 100: break
-        page += 1
-
-    return {
-        "rides": total_rides,
-        "total_distance": round(total_dist / 1000, 1),
-        "rides_curr": rides_curr,
-        "distance_curr": round(dist_curr / 1000, 1),
-        "rides_prev": rides_prev,
-        "distance_prev": round(dist_prev / 1000, 1),
-        "bike_total": round(bike_total / 1000, 1),
-        "hike_total": round(hike_total / 1000, 1)
-    }
-
-
-
-
 def update_data_thread():
-    global global_printer
-
-    if ENABLE_BAMBU:
-        try:
-            global_printer = bl.Printer(PRINTER_CONF['IP'], PRINTER_CONF['ACCESS_CODE'], PRINTER_CONF['SERIAL'])
-        except Exception as e:
-            logging.error(f"Bambu init error: {e}")
-            global_printer = None
-
-    is_connected = False
-
     while True:
         now = time.time()
 
@@ -560,51 +352,6 @@ def update_data_thread():
                         data_store.aqi = int(round(val))
             data_store.last_update['aqi'] = now
 
-        if ENABLE_STRAVA:
-            if now - data_store.last_update['strava'] > 900:
-                s_data = fetch_strava_data()
-                if s_data:
-                    with data_store.lock: data_store.strava = s_data
-                data_store.last_update['strava'] = now
-
-        if ENABLE_BAMBU:
-            update_interval = 5 if is_connected else 15
-            if now - data_store.last_update['printer'] > update_interval:
-                is_alive = ping_printer(PRINTER_CONF['IP'])
-                if is_alive:
-                    try:
-                        if not is_connected and global_printer:
-                            global_printer.connect()
-                            time.sleep(1)
-                            is_connected = True
-                        if global_printer:
-                            status = global_printer.get_state()
-                            if status and status != "UNKNOWN":
-                                with data_store.lock:
-                                    data_store.printer = {
-                                        'status': status,
-                                        'percentage': global_printer.get_percentage(),
-                                        'remaining_time': global_printer.get_time(),
-                                        'layers': f"{global_printer.current_layer_num()}/{global_printer.total_layer_num()}"
-                                    }
-                    except Exception as e:
-                        is_connected = False
-                        with data_store.lock:
-                            data_store.printer['status'] = 'OFFLINE'
-                        try:
-                            if global_printer: global_printer.disconnect()
-                        except:
-                            pass
-                else:
-                    if is_connected:
-                        is_connected = False
-                        try:
-                            global_printer.disconnect()
-                        except:
-                            pass
-                    with data_store.lock:
-                        data_store.printer['status'] = 'OFFLINE'
-                data_store.last_update['printer'] = now
         if now - data_store.last_update['gmail'] > 300:
             try:
                 creds = None
@@ -734,28 +481,6 @@ def update_data_thread():
                 with data_store.lock:
                     data_store.claude['error'] = True
             data_store.last_update['claude'] = now
-
-        if ENABLE_ANTIGRAVITY and now - data_store.last_update['antigravity'] > 60:
-            try:
-                subprocess.run([sys.executable, os.path.join(BASE_DIR, 'antigravity.py')], capture_output=True, timeout=30)
-                limits_path = os.path.join(BASE_DIR, 'limits.json')
-                if os.path.exists(limits_path):
-                    with open(limits_path, 'r', encoding='utf-8') as f:
-                        limits_data = json.load(f)
-                    with data_store.lock:
-                        data_store.antigravity = limits_data
-                        if "error" in limits_data:
-                            data_store.antigravity['error'] = True
-                        else:
-                            data_store.antigravity['error'] = False
-                else:
-                    with data_store.lock:
-                        data_store.antigravity['error'] = True
-            except Exception as e:
-                logging.error(f"Antigravity update error: {e}")
-                with data_store.lock:
-                    data_store.antigravity['error'] = True
-            data_store.last_update['antigravity'] = now
 
         if ENABLE_SPOTIFY and now - data_store.last_update['spotify'] > 20:
             url = f"{API_ENDPOINTS['lastfm']}?method=user.getrecenttracks&user={LASTFM_CONF['USERNAME']}&api_key={LASTFM_CONF['API_KEY']}&format=json&limit=2&rnd={int(now)}"
@@ -1072,12 +797,9 @@ def render_screen(epd, fonts):
     if not data_store.lock.acquire(timeout=2.0): return Himage
     try:
         weather = data_store.weather.copy()
-        strava = data_store.strava.copy()
-        printer = data_store.printer.copy()
         calendar_events = list(data_store.calendar_events)
         tasks_items = list(data_store.tasks_items)
         claude = data_store.claude.copy()
-        antigravity = data_store.antigravity.copy()
         aqi = data_store.aqi
     finally:
         data_store.lock.release()
@@ -1180,19 +902,8 @@ def render_screen(epd, fonts):
 
     draw.line((rail_w + 8, BAND_H + 14, rail_w + 8, 330), fill='black', width=1)
 
-    # --- MIDDLE (calendar/printer + tasks/antigravity, flow layout) ---
+    # --- MIDDLE (calendar + tasks, flow layout) ---
     y = BAND_H + 12
-    if ENABLE_STRAVA:
-        draw_icon(draw, mid_x, y, 'icon_strava', (40, 40))
-        draw.text((mid_x + 50, y), STRINGS.get('strava_title', 'STRAVA STATS'),
-                  font=fonts['b26'], fill='black')
-        draw.text((mid_x + 50, y + 34),
-                  STRINGS.get('strava_year_stats', '{year}: {dist} km | {prev_year}: {prev_dist} km').format(
-                      year=dt.year, dist=strava.get('distance_curr', 0),
-                      prev_year=dt.year - 1, prev_dist=strava.get('distance_prev', 0)),
-                  font=fonts['r22'], fill='black')
-        y += 70
-
     if ENABLE_CALENDAR:
         draw.text((mid_x, y), STRINGS.get('calendar_title', 'UPCOMING'), font=fonts['b26'], fill='black')
         y += 42
@@ -1225,19 +936,6 @@ def render_screen(epd, fonts):
             draw.text((mid_x, y), STRINGS.get('calendar_empty', 'No upcoming events'),
                       font=fonts['r24'], fill='black')
             y += row_h
-    elif ENABLE_BAMBU:
-        p_status = str(printer.get('status', 'OFFLINE')).upper()
-        draw_icon(draw, mid_x, y, 'icon_3d', (50, 50))
-        draw.text((mid_x + 60, y), STRINGS.get('printer_title', 'PRINTER: {status}').format(status=p_status),
-                  font=fonts['b26'], fill='black')
-        if p_status not in ['OFFLINE', 'UNKNOWN', 'FINISH']:
-            percent = printer.get('percentage', 0)
-            draw.rectangle((mid_x + 60, y + 40, mid_x + 390, y + 60), outline='black')
-            draw.rectangle((mid_x + 60, y + 40, mid_x + 60 + int(330 * (percent / 100)), y + 60), fill='black')
-            draw.text((mid_x + 60, y + 70),
-                      f"{percent}% | Rem: {printer.get('remaining_time', '0')}m | {printer.get('layers', '0/0')} L",
-                      font=fonts['r22'], fill='black')
-        y += 110
 
     if ENABLE_TASKS:
         if tasks_items:
@@ -1254,22 +952,6 @@ def render_screen(epd, fonts):
                 draw.text((tx, y), fit_text(task['title'], fonts['r24'], mid_x + mid_w - tx - 6),
                           font=fonts['r24'], fill='black')
                 y += row_h
-    elif ENABLE_ANTIGRAVITY:
-        y += 6
-        if antigravity.get('error'):
-            draw.text((mid_x, y), STRINGS.get('error_loading_data', 'Error loading data'),
-                      font=fonts['r22'], fill='black')
-        else:
-            models = antigravity.get('models', [])
-            opus = next((m for m in models if m.get('modelId') == 'claude-opus-4-6-thinking'), None)
-            gemini = next((m for m in models if m.get('modelId') == 'gemini-3-pro-high'), None)
-            for m_data in (opus, gemini):
-                if m_data and y + 48 <= MID_FLOOR:
-                    label = "Opus 4.6" if m_data.get('modelId') == 'claude-opus-4-6-thinking' else "Gemini 3Pro"
-                    pct = m_data.get('usedPercentage', 0)
-                    draw_usage_bar(draw, fonts, mid_x, y, mid_w - 20, pct,
-                                   f"{label} · {pct}%", time_until(m_data.get('resetDate')))
-                    y += 48
 
     # --- FORECAST STRIP (bottom, rail + middle width) ---
     d_times = daily.get('time', [])
@@ -1337,9 +1019,7 @@ def render_screen(epd, fonts):
 # --- MAIN LOOP ---
 def main():
     auth_google()
-    auth_strava()
     auth_claude()
-    auth_antigravity()
 
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.signal(signal.SIGUSR1, refresh_signal_handler)

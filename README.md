@@ -154,6 +154,8 @@ These three share a single OAuth flow:
 ### Custom Message Widget
 The right column (col3) is driven by `message_server.py`, a lightweight HTTP server that runs alongside the dashboard.
 
+The message is displayed in a box occupying the top 1/3 of col3 (~160px). The box shows a header, up to 2 lines of body text, and a "received X ago" timestamp pinned to the bottom of the box. The rest of col3 is blank.
+
 Start it once (it persists across dashboard restarts):
 ```bash
 tmux new-session -d -s msgserver "cd ~/Waveshare-ePaper-10.85-dashboard && python3 message_server.py"

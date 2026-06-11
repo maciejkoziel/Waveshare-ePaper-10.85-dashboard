@@ -319,15 +319,15 @@ Display 1360×480. `render_screen()` divides into three equal columns (`col_w = 
 y=0  ┌──────────────────────────────────────────┬──────────────┐
      │  Calendar (single line, Doto Bold)        │              │
 y=65 ├──────────────────────────────────────────┤   col3       │
-     │  col1 (Weather)   │  col2 (Widgets)       │  (Custom     │
-     │                   │                       │   Message)   │
-     │  Temp + icon + UV │  Strava (opt)         │              │
-     │  Humidity, Press  │  Bambu (opt)          │  header +    │
-     │  (y=65–200)       │                       │  body text   │
-y=210├───────────────────┤  ─────────────────    │  blank when  │
-     │  5-day forecast   │  Roborock /           │  no message  │
-     │  (y=220–480)      │  Antigravity (opt)    │              │
-     │                   │                       │              │
+     │  col1 (Weather)   │  col2 (Widgets)       │  ┌────────┐ │
+     │                   │                       │  │header  │ │
+     │  Temp + icon + UV │  Strava (opt)         │  │body    │ │
+     │  Humidity, Press  │  Bambu (opt)          │  │(2 lines│ │
+     │  (y=65–200)       │                       │  │max)    │ │
+y=210├───────────────────┤  ─────────────────    │  │X ago   │ │
+     │  5-day forecast   │  Roborock /           │  └────────┘ │
+     │  (y=220–480)      │  Antigravity (opt)    │  (top 1/3,  │
+     │                   │                       │  ~y10–170)  │
 y=470└───────────────────┴───────────────────────┴──────────────┘
 ```
 
@@ -344,7 +344,11 @@ y=470└───────────────────┴────
 
 ## Custom Message Widget (col3)
 
-Col3 is entirely dedicated to a custom message sent over the network. When no message is set it is blank.
+Col3 shows a custom message sent over the network. When no message is set, col3 is blank.
+
+**Slot geometry:** box occupies top 1/3 of col3 height (~y=10–170, ~160px tall). Rest of col3 is blank.
+
+**Layout inside box:** header (`fonts['28']`) at top, body (`fonts['20']`, max 2 lines) below, "X ago" timestamp pinned to bottom-inside of box. Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
 
 **message_server.py** runs as a separate process (tmux session `msgserver`) and listens on port 5000.
 

@@ -1,4 +1,6 @@
 settings_local.toml
+CLAUDE.md
+.claude/
 
 # OAuth / session tokens
 strava_token.json

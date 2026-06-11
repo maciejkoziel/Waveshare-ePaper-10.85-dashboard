@@ -243,10 +243,10 @@ def render(fs):
     y += 42
 
     cal_rows = [
-        ('yellow', 'TODAY', '17:00', 'Football training',   'red'),
-        ('yellow', 'TOM',   '09:15', 'Dentist — Michael',   'black'),
+        ('yellow', 'TODAY', '15:00', 'Stand-up meeting',    'red'),    # ongoing
+        ('yellow', 'TODAY', '17:00', 'Football training',   'black'),  # upcoming
+        ('black',  'TOM',   '09:15', 'Dentist — Michael',   'black'),
         ('black',  'FRI',   '18:30', 'Cinema with Anna',    'black'),
-        ('black',  '+5',    '10:00', 'Car service',         'black'),
     ]
     DAY_X, TIME_X, TITLE_X = mid_x + 28, mid_x + 122, mid_x + 200
     for sq, day, tm, title, color in cal_rows:

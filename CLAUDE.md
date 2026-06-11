@@ -213,6 +213,7 @@ Display still takes ~21s to physically update after signal.
 
 ```
 main.py              # Main script — widget logic, rendering, main loop
+message_server.py    # Standalone HTTP server for col3 custom message widget (port 5000)
 claude.py            # Claude Code usage data fetcher
 antigravity.py       # Antigravity usage data fetcher
 lib/
@@ -231,6 +232,7 @@ Credential/token files (not in repo, created on first run):
 - `roborock_session.pkl` — Roborock session
 - `roborock_stats.json` — Roborock stats cache
 - `claude_creds.json` — Claude Code OAuth tokens
+- `dashboard_message.json` — current custom message for col3 (written by message_server.py)
 
 ## Architecture
 
@@ -264,7 +266,7 @@ enable_claude      = false
 enable_spotify     = false
 ```
 
-Disabled widgets show empty col2 space. Col1 always shows weather.
+Disabled widgets show empty col2 space. Col1 always shows weather. Col3 always shows the custom message widget (blank when no message is set).
 
 ## Font Notes
 
@@ -302,6 +304,9 @@ language = "pl"    # "en" or "pl"
 
 [weather]
 forecast_days = 5  # 5 or 7
+
+[message_server]
+port = 5000        # HTTP port for message_server.py (default: 5000)
 ```
 
 Location controls Open-Meteo weather API. Wrong coords → wrong weather data.
@@ -314,13 +319,13 @@ Display 1360×480. `render_screen()` divides into three equal columns (`col_w = 
 y=0  ┌──────────────────────────────────────────┬──────────────┐
      │  Calendar (single line, Doto Bold)        │              │
 y=65 ├──────────────────────────────────────────┤   col3       │
-     │  col1 (Weather)   │  col2 (Widgets)       │  (Claude /   │
-     │                   │                       │  Spotify /   │
-     │  Temp + icon + UV │  Strava (opt)         │  Progress /  │
-     │  Humidity, Press  │  Bambu (opt)          │  Gmail)      │
-     │  (y=65–200)       │                       │              │
-y=210├───────────────────┤  ─────────────────    │              │
-     │  5-day forecast   │  Roborock /           │              │
+     │  col1 (Weather)   │  col2 (Widgets)       │  (Custom     │
+     │                   │                       │   Message)   │
+     │  Temp + icon + UV │  Strava (opt)         │              │
+     │  Humidity, Press  │  Bambu (opt)          │  header +    │
+     │  (y=65–200)       │                       │  body text   │
+y=210├───────────────────┤  ─────────────────    │  blank when  │
+     │  5-day forecast   │  Roborock /           │  no message  │
      │  (y=220–480)      │  Antigravity (opt)    │              │
      │                   │                       │              │
 y=470└───────────────────┴───────────────────────┴──────────────┘
@@ -336,6 +341,48 @@ y=470└───────────────────┴────
 - Forecast `f_y = 220`, `icon_sz` capped at 50
 
 **i18n:** `lang/pl.toml` and `lang/en.toml`. All Polish strings use full diacritics. `weekdays_full` key holds unabbreviated weekday names used by calendar.
+
+## Custom Message Widget (col3)
+
+Col3 is entirely dedicated to a custom message sent over the network. When no message is set it is blank.
+
+**message_server.py** runs as a separate process (tmux session `msgserver`) and listens on port 5000.
+
+### Starting the message server
+
+```bash
+ssh maciej@192.168.12.175 'cd ~/Waveshare-ePaper-10.85-dashboard && tmux new-session -d -s msgserver "python3 message_server.py"'
+```
+
+### API
+
+```bash
+# Set a message
+curl -X POST http://192.168.12.175:5000/message \
+  -H 'Content-Type: application/json' \
+  -d '{"header":"ALERT","body":"Dinner is ready","text_color":"black","bg_color":"yellow","border_color":"red","ttl":3600}'
+
+# Clear message
+curl -X DELETE http://192.168.12.175:5000/message
+
+# Read current message
+curl http://192.168.12.175:5000/message
+```
+
+### Message schema
+
+| Field | Type | Values | Description |
+|-------|------|--------|-------------|
+| `header` | string | any | Large text at top, optional |
+| `body` | string | any | Main text, word-wrapped |
+| `text_color` | string | `black` `white` `red` `yellow` | Default: `black` |
+| `bg_color` | string | `black` `white` `red` `yellow` | Default: `white` |
+| `border_color` | string | `black` `white` `red` `yellow` `""` | Empty = no border |
+| `ttl` | int | seconds | `0` = persistent; auto-clears on expiry |
+
+After any POST/DELETE the server sends SIGUSR1 to main.py, triggering an immediate display refresh.
+
+State persists across restarts in `dashboard_message.json`.
 
 ## Pi Zero Constraints
 

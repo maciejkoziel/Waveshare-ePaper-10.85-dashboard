@@ -8,15 +8,16 @@ A fully functional E-ink dashboard running on a Raspberry Pi. Designed for the W
 ## Key Features
 
 * **4-color display support (G variant):** Fully ported to the `epd10in85g` driver — supports Red, Yellow, Black, and White on the Waveshare 10.85" e-Paper (G) panel (SKU 30411). Full refresh only, 180s minimum interval.
-* **Antigravity usage data:** Displays usage data for Antigravity, showing the limit and reset time.
-* **Claude Code usage data:** Displays usage data for Claude Code, showing the 5-hour limit, 7-day limit, and reset times.
-* **Weather & Air Quality:** Real-time temperature, humidity, wind direction/speed, UV index, 4-hour forecast, and AQI using the Open-Meteo API.
+* **Weather:** Real-time temperature, humidity, wind direction/speed, UV index, 5/7-day forecast, sunrise/sunset times, and moon phase using the Open-Meteo API.
+* **Google Calendar:** Upcoming events from your primary Google Calendar.
+* **Google Tasks:** Active tasks from your Google Tasks lists.
 * **Strava Integration:** Total and yearly activity statistics (distance and ride counts), including breakdowns for biking and hiking.
 * **Bambu Lab 3D Printer:** Live monitoring of print status, completion percentage, remaining time, and current layer progress.
 * **Roborock Vacuum:** Live battery level, current status, and cleaned area tracking during active cleaning.
 * **Spotify:** Displays the currently playing track and artist via Last.fm.
-* **Gmail:** Tracks the number of unread emails in your primary inbox.
-* **System Fallbacks:** Automatically switches to System Load (CPU/RAM), Cryptocurrency prices (BTC/ETH), and Ping/Internet quality when hardware integrations are disabled.
+* **Antigravity usage data:** Displays usage data for Antigravity, showing the limit and reset time.
+* **Claude Code usage data:** Displays usage data for Claude Code, showing the 5-hour limit, 7-day limit, and reset times.
+* **Custom message widget:** A dedicated right column for messages sent over the network via a built-in HTTP server. Supports header, body, e-ink colors, border, and TTL-based auto-clear. Any device on the network can push a message with a single `curl` command.
 
 ---
 
@@ -47,7 +48,7 @@ sudo raspi-config
 Install system dependencies:
 ```bash
 sudo apt update
-sudo apt install python3-pip python3-pil python3-numpy git tmux -y
+sudo apt install python3-pip python3-pil python3-numpy git -y
 ```
 
 ### 2. Python Dependencies
@@ -60,60 +61,122 @@ pip3 install --break-system-packages requests Pillow \
 
 > `bambulabs_api` is bundled in `lib/`. The G-display driver (`epd10in85g` + `epdconfig_g`) is also bundled in `lib/waveshare_epd/`.
 
-### 3. Clone and Run
+### 3. Clone and Install
 
 ```bash
 git clone https://github.com/maciejkoziel/Waveshare-ePaper-10.85-dashboard.git
 cd Waveshare-ePaper-10.85-dashboard
-tmux new -s dashboard
-python3 main.py
-# Detach: Ctrl+B, then D
+bash install-service.sh
+```
+
+This installs and starts a systemd service (`dashboard.service`) that runs on boot and restarts automatically on failure.
+
+**Useful commands:**
+```bash
+systemctl status dashboard      # check status
+journalctl -u dashboard -f      # follow logs
+sudo systemctl restart dashboard
+sudo systemctl stop dashboard
 ```
 
 ---
 
 ## Configuration
 
-All widget toggles and API configs are at the top of `main.py`:
+All config lives in `settings_local.toml` in the project directory (not committed to the repo). Create it before starting the service:
 
-```python
-ENABLE_STRAVA = False
-ENABLE_BAMBU = False
-ENABLE_ROBOROCK = False
-ENABLE_ANTIGRAVITY = False
-ENABLE_CLAUDE = False
-ENABLE_SPOTIFY = False
+```toml
+[widgets]
+enable_strava      = false
+enable_bambu       = false
+enable_roborock    = false
+enable_antigravity = false
+enable_tasks       = false
+enable_claude      = false
+enable_spotify     = false
+enable_calendar    = false
 
-LOCATION_LAT = 44.8240855
-LOCATION_LON = 20.4934273
+[location]
+lat = 44.8240855
+lon = 20.4934273
+
+[printer]
+ip          = "192.168.x.x"
+serial      = "YOUR_SERIAL"
+access_code = "YOUR_CODE"
+
+[roborock]
+email = "your@email.com"
+
+[lastfm]
+api_key  = "YOUR_KEY"
+username = "YOUR_USERNAME"
+
+[weather]
+forecast_days = 5   # 5 or 7
+
+[display]
+language = "en"     # "en" or "pl"
+
+[message_server]
+port = 5000         # port for the custom message HTTP server
 ```
 
+### Google (Gmail / Calendar / Tasks)
+These three share a single OAuth flow:
+1. In Google Cloud Console: create a project, enable the Gmail API, Google Calendar API, and Google Tasks API.
+2. Create OAuth 2.0 credentials (Desktop App) and download the JSON as `credentials.json` in the project directory.
+3. **Before starting the service**, run `python3 main.py` once in a terminal — it will print an authorization URL.
+4. Open the URL in a browser, authorize, and paste the redirect URL back. Tokens saved to `token.json`.
+
 ### Claude Code
-1. Run `main.py` from the terminal for the first time.
-2. Copy the authorization URL, open it in a browser, authorize, and paste back the redirect URL containing `code=...`.
+1. **Before starting the service**, run `python3 main.py` once in a terminal.
+2. Copy the authorization URL, authorize in a browser, and paste back the redirect URL containing `code=...`.
 3. Tokens are saved to `claude_creds.json`.
 
 ### Strava
 1. Create a Strava API Application and note your Client ID and Secret.
-2. Run `main.py` — it will print an authorization URL.
+2. **Before starting the service**, run `python3 main.py` — it will print an authorization URL.
 3. Authorize in browser, paste the redirect URL back. Tokens saved to `strava_token.json`.
 
 ### Roborock
-1. Set your account email in `ROBOROCK_CONF` in `main.py`.
-2. Run the script — enter the 6-digit OTP sent to your email. Session saved to `roborock_session.pkl`.
+1. Set your account email under `[roborock]` in `settings_local.toml`.
+2. **Before starting the service**, run `python3 main.py` — enter the 6-digit OTP sent to your email. Session saved to `roborock_session.pkl`.
 
 ### Bambu Lab 3D Printer
 1. On the printer: **Settings -> Network** — note IP, Serial Number, and Access Code.
-2. Update `PRINTER_CONF` in `main.py`.
+2. Set them under `[printer]` in `settings_local.toml`.
 
 ### Spotify (via Last.fm)
 1. Connect your Spotify account to Last.fm.
-2. Generate a Last.fm API Key and update `LASTFM_CONF` in `main.py`.
+2. Generate a Last.fm API Key and set `api_key` and `username` under `[lastfm]` in `settings_local.toml`.
 
-### Gmail
-1. In Google Cloud Console: create a project, enable Gmail API, create OAuth 2.0 credentials (Desktop App).
-2. Download the credentials JSON and place it as `credentials.json` in the project directory.
-3. On first run the script will prompt for OAuth authorization and save `token.json`.
+### Custom Message Widget
+The right column (col3) is driven by `message_server.py`, a lightweight HTTP server that runs alongside the dashboard.
+
+Start it once (it persists across dashboard restarts):
+```bash
+tmux new-session -d -s msgserver "cd ~/Waveshare-ePaper-10.85-dashboard && python3 message_server.py"
+```
+
+Send a message from any device on the network:
+```bash
+curl -X POST http://<pi-ip>:5000/message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "header": "ALERT",
+    "body": "Dinner is ready",
+    "text_color": "black",
+    "bg_color": "yellow",
+    "border_color": "red",
+    "ttl": 3600
+  }'
+
+# Clear it
+curl -X DELETE http://<pi-ip>:5000/message
+```
+
+Colors: `black`, `white`, `red`, `yellow`. `ttl: 0` = persistent. The server automatically signals the dashboard to refresh after each change.
 
 ---
 

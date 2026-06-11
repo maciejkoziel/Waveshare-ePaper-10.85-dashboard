@@ -969,6 +969,32 @@ def render_screen(epd, fonts):
             draw.text((off_x + 4, f_y + 24 + icon_sz + 2), f"{tmax}°", font=fonts['20'], fill="black")
             draw.text((off_x + 4, f_y + 24 + icon_sz + 20), f"{tmin}°", font=fonts['20'], fill="black")
 
+        if ENABLE_CLAUDE:
+            cu_y = f_y + 24 + icon_sz + 40
+            draw.line((col1_x, cu_y - 8, col_w - 20, cu_y - 8), fill="black", width=1)
+            draw.text((col1_x, cu_y), STRINGS.get('claude_title', 'CLAUDE AI USAGE'), font=fonts['20'], fill="black")
+            if claude.get('error'):
+                draw.text((col1_x, cu_y + 25), STRINGS.get('claude_error', 'Claude Usage Error'), font=fonts['20'], fill="black")
+            else:
+                pct_5h = claude.get('five_hour', {}).get('utilization', 0)
+                resets_5h = claude.get('five_hour', {}).get('resets_at')
+                rem_5h = time_until(resets_5h)
+                pct_7d = claude.get('seven_day', {}).get('utilization', 0)
+                resets_7d = claude.get('seven_day', {}).get('resets_at')
+                rem_7d = time_until(resets_7d)
+                bar_w = col_w - 40
+                bx = col1_x
+                draw.text((col1_x, cu_y + 25), STRINGS.get('claude_5h', '5-Hour Limit: {pct}% (Resets in {time})').format(pct=pct_5h, time=rem_5h), font=fonts['20'], fill="black")
+                draw.rectangle((bx, cu_y + 48, bx + bar_w, cu_y + 60), outline="black", width=2)
+                fill_w = int((bar_w - 4) * min(pct_5h / 100.0, 1.0))
+                if fill_w > 0:
+                    draw.rectangle((bx + 2, cu_y + 50, bx + 2 + fill_w, cu_y + 58), fill="black")
+                draw.text((col1_x, cu_y + 68), STRINGS.get('claude_7d', '7-Day Limit: {pct}% (Resets in {time})').format(pct=pct_7d, time=rem_7d), font=fonts['20'], fill="black")
+                draw.rectangle((bx, cu_y + 91, bx + bar_w, cu_y + 103), outline="black", width=2)
+                fill_w = int((bar_w - 4) * min(pct_7d / 100.0, 1.0))
+                if fill_w > 0:
+                    draw.rectangle((bx + 2, cu_y + 93, bx + 2 + fill_w, cu_y + 101), fill="black")
+
     draw.line((col_w, y_cal_div, col_w, 470), fill="black", width=2)
 
     # --- COLUMN 2 (Widgets) ---

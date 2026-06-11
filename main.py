@@ -845,6 +845,28 @@ def read_message():
         return None
 
 
+def time_ago(ts):
+    secs = int(time.time() - ts)
+    if secs < 60:
+        return f"{secs}s ago"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins}m ago"
+    hours = mins // 60
+    rem_mins = mins % 60
+    if hours < 24:
+        return f"{hours}h {rem_mins}m ago" if rem_mins else f"{hours}h ago"
+    days = hours // 24
+    if days < 7:
+        return f"{days}d ago"
+    weeks = days // 7
+    rem_days = days % 7
+    if weeks < 5:
+        return f"{weeks}w {rem_days}d ago" if rem_days else f"{weeks}w ago"
+    months = days // 30
+    return f"{months}mo ago"
+
+
 def wrap_text(text, font, max_width):
     words = text.split()
     lines = []
@@ -1190,9 +1212,14 @@ def render_screen(epd, fonts):
 
         body = msg.get('body', '').strip()
         if body:
-            for line in wrap_text(body, fonts['24'], col3_w - pad * 2)[:13]:
+            for line in wrap_text(body, fonts['24'], col3_w - pad * 2)[:12]:
                 draw.text((col3_x + pad, y), line, font=fonts['24'], fill=tc)
                 y += 30
+
+        created_at = msg.get('created_at')
+        if created_at:
+            ago = time_ago(created_at)
+            draw.text((col3_x + pad, 450), ago, font=fonts['20'], fill=tc)
 
     return Himage
 

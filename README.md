@@ -99,12 +99,17 @@ forecast_days = 5   # 5 or 7
 [display]
 language = "en"     # "en" or "pl"
 
+[calendar]
+# Calendar names containing any of these substrings are treated as "family"
+# and shown in yellow instead of white. Case-insensitive.
+family_keywords = ["family"]   # e.g. ["family", "rodzina", "shared"]
+
 [message_server]
 port = 5000         # port for the custom message HTTP server
 ```
 
 ### Google (Calendar / Tasks)
-Calendar and Tasks share a single OAuth flow. Gmail unread count is also fetched but not currently rendered.
+Calendar and Tasks share a single OAuth flow.
 
 1. In Google Cloud Console: create a project, enable the Google Calendar API and Google Tasks API (and Gmail API if desired).
 2. Create OAuth 2.0 credentials (Desktop App) and download the JSON as `credentials.json` in the project directory.

@@ -55,15 +55,16 @@ try:
     LOCATION_LON = _loc.get('lon', 20.4934273)
     LANGUAGE = _cfg.get('display', {}).get('language', 'en')
     FORECAST_DAYS = _cfg.get('weather', {}).get('forecast_days', 5)
+    FAMILY_CALENDAR_KEYWORDS = _cfg.get('calendar', {}).get('family_keywords', ['family'])
 except FileNotFoundError:
     ENABLE_CALENDAR = False
     ENABLE_TASKS = False
     ENABLE_CLAUDE = False
     LOCATION_LAT = 44.8240855
     LOCATION_LON = 20.4934273
-
     LANGUAGE = 'en'
     FORECAST_DAYS = 5
+    FAMILY_CALENDAR_KEYWORDS = ['family']
 
 # --- LANGUAGE STRINGS ---
 LANG_DIR = os.path.join(BASE_DIR, 'lang')
@@ -355,7 +356,7 @@ def update_data_thread():
                         name = cal.get('summary', '')
                         if cal.get('primary'):
                             calendar_ids[cal['id']] = 'personal'
-                        elif 'rodzin' in name.lower():
+                        elif any(kw in name.lower() for kw in FAMILY_CALENDAR_KEYWORDS):
                             calendar_ids[cal['id']] = 'family'
                     all_events = []
                     for cal_id, cal_type in calendar_ids.items():

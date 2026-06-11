@@ -832,17 +832,16 @@ def get_weather_icon(code, is_day=1):
     return "icon_sun"
 
 
-def read_message():
+def read_messages():
     try:
         with open(MESSAGE_FILE) as f:
-            msg = json.load(f)
-        ttl = msg.get('ttl', 0)
-        if ttl > 0 and time.time() - msg.get('created_at', 0) > ttl:
-            os.remove(MESSAGE_FILE)
-            return None
-        return msg
+            data = json.load(f)
+        if isinstance(data, dict):
+            data = [data]
+        now = time.time()
+        return [m for m in data if not (m.get('ttl', 0) > 0 and now - m.get('created_at', 0) > m['ttl'])]
     except (FileNotFoundError, json.JSONDecodeError):
-        return None
+        return []
 
 
 def time_ago(ts):
@@ -1187,14 +1186,17 @@ def render_screen(epd, fonts):
 
     draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)
 
-    # --- COLUMN 3 (Custom Message) ---
+    # --- COLUMN 3 (Custom Messages, up to 3 slots) ---
     col3_x = col_w * 2 + 30
     col3_w = total_width - col3_x - 10
-    slot_top = 10
-    slot_bot = slot_top + epd.height // 3   # 160px = 1/3 column height
+    SLOT_H = 150
+    SLOT_GAP = 5
 
-    msg = read_message()
-    if msg:
+    messages = read_messages()
+    for i, msg in enumerate(messages[:3]):
+        slot_top = 10 + i * (SLOT_H + SLOT_GAP)
+        slot_bot = slot_top + SLOT_H
+
         bg  = msg.get('bg_color', 'white')
         tc  = msg.get('text_color', 'black')
         bc  = msg.get('border_color', '')
@@ -1205,26 +1207,26 @@ def render_screen(epd, fonts):
             draw.rectangle((col3_x, slot_top, col3_x + col3_w, slot_bot), outline=bc, width=border)
 
         pad = 14
-        y = slot_top + 8
+        y = slot_top + 6
         header = msg.get('header', '').strip()
         created_at = msg.get('created_at')
 
         if header or created_at:
             if header:
-                draw.text((col3_x + pad, y), header, font=fonts['28'], fill=tc)
+                draw.text((col3_x + pad, y), header, font=fonts['24'], fill=tc)
             if created_at:
                 ago = time_ago(created_at)
                 ago_w = fonts['20'].getlength(ago)
-                draw.text((col3_x + col3_w - pad - ago_w, y + 6), ago, font=fonts['20'], fill=tc)
-            y += 36
+                draw.text((col3_x + col3_w - pad - ago_w, y + 4), ago, font=fonts['20'], fill=tc)
+            y += 30
             draw.line((col3_x + pad, y, col3_x + col3_w - pad, y), fill=tc, width=1)
-            y += 8
+            y += 6
 
         body = msg.get('body', '').strip()
         if body:
             for line in wrap_text(body, fonts['20'], col3_w - pad * 2)[:2]:
                 draw.text((col3_x + pad, y), line, font=fonts['20'], fill=tc)
-                y += 26
+                y += 24
 
     return Himage
 

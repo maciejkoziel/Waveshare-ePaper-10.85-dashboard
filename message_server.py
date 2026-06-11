@@ -2,13 +2,13 @@
 # -*- coding:utf-8 -*-
 """
 Dashboard message server.
-Listens for incoming messages and writes them to dashboard_message.json,
-then signals main.py to trigger an immediate display refresh.
+Stores up to 3 messages in round-robin fashion (newest replaces oldest).
+Signals main.py to refresh after each change.
 
 API:
-  POST   /message        — set message (JSON body, see schema below)
-  DELETE /message        — clear message
-  GET    /message        — get current message
+  POST   /message  — add message (JSON body, see schema below); oldest dropped when queue full
+  DELETE /message  — clear all messages sent from the caller's IP
+  GET    /message  — get current message list
 
 Message schema:
   {
@@ -35,6 +35,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 MESSAGE_FILE = os.path.join(BASE_DIR, 'dashboard_message.json')
+MAX_MESSAGES = 3
 
 try:
     with open(os.path.join(BASE_DIR, 'settings_local.toml'), 'rb') as _f:
@@ -56,24 +57,26 @@ def _notify_dashboard():
         pass
 
 
-def _read_message():
+def _read_messages():
     try:
         with open(MESSAGE_FILE) as f:
-            return json.load(f)
+            data = json.load(f)
+        if isinstance(data, dict):
+            data = [data]
+        return data
     except (FileNotFoundError, json.JSONDecodeError):
-        return None
+        return []
 
 
-def _write_message(msg):
-    with open(MESSAGE_FILE, 'w') as f:
-        json.dump(msg, f)
-
-
-def _clear_message():
-    try:
-        os.remove(MESSAGE_FILE)
-    except FileNotFoundError:
-        pass
+def _write_messages(msgs):
+    if msgs:
+        with open(MESSAGE_FILE, 'w') as f:
+            json.dump(msgs, f)
+    else:
+        try:
+            os.remove(MESSAGE_FILE)
+        except FileNotFoundError:
+            pass
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -90,11 +93,11 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == '/message':
-            msg = _read_message()
-            if msg is None:
-                self._send_json(404, {'error': 'no message'})
+            msgs = _read_messages()
+            if not msgs:
+                self._send_json(404, {'error': 'no messages'})
             else:
-                self._send_json(200, msg)
+                self._send_json(200, msgs)
         else:
             self._send_json(404, {'error': 'not found'})
 
@@ -104,7 +107,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == '/message/reset':
-            _clear_message()
+            _write_messages([])
             _notify_dashboard()
             self._send_json(200, {'ok': True})
             return
@@ -128,14 +131,19 @@ class _Handler(BaseHTTPRequestHandler):
             'border_color': _color('border_color', '') if data.get('border_color') else '',
             'ttl':          max(0, int(data.get('ttl', 0))),
             'created_at':   time.time(),
+            'sender_ip':    self.client_address[0],
         }
-        _write_message(msg)
+        msgs = _read_messages()
+        msgs.append(msg)
+        _write_messages(msgs[-MAX_MESSAGES:])
         _notify_dashboard()
         self._send_json(200, {'ok': True})
 
     def do_DELETE(self):
         if self.path == '/message':
-            _clear_message()
+            sender_ip = self.client_address[0]
+            msgs = _read_messages()
+            _write_messages([m for m in msgs if m.get('sender_ip') != sender_ip])
             _notify_dashboard()
             self._send_json(200, {'ok': True})
         else:

@@ -268,12 +268,15 @@ Middle column: calendar + tasks. Left rail: NASTĘPNE box (top) + weather (below
 
 ## Font Notes
 
-Fonts in `fnt/`. Active fonts:
-- `AtkinsonHyperlegible-Regular.ttf` — body text (keys `r20`–`r26` in fonts dict)
-- `AtkinsonHyperlegible-Bold.ttf` — headers, times, hero numbers (keys `b22`–`b96`)
-- All others (`ElmsSans`, `Doto`, `EncodeSansCondensed`, `AntonSC`, `Aldrich`, `Oregano`, `BilboSwashCaps`) — available, not active
+Fonts in `fnt/`. Active: Archivo family ("Direction C — Brutalist poster", 2026-06 redesign). Fonts dict uses semantic keys (mirrors `mock/render_mock.py` `fonts_C()`):
+- `ArchivoBlack-Regular.ttf` — display: masthead date (`masthead` 32), hero temp (`hero` 130 + `hero_deg` 52 raised), NASTĘPNE time (`next_time` 44), forecast hi (`fc_hi` 30), UV value (`uv` 36)
+- `ArchivoNarrow-Bold.ttf` — caps labels, +2px tracking via `draw_tracked()`: `label`/`label_knock` 24 (NADCHODZĄCE, NASTĘPNE, CLAUDE AI, `fc_day`), `cal_day` 24, `cal_time` 26, `fc_rain` 24, `holiday` 28. Knocked-out caps labels max 24px — 26 clips Ę ogonek into separator; rail headers at y+5 (3px above old y+8) for clearance
+- `Archivo-Regular.ttf` — body: `body` 24 (event titles, weather details), `body22` 22 (tasks, message body, `fc_lo`), `small` 20 (timestamps, bar subs)
+- `Archivo-Medium.ttf` — on-black body: `body_knock` 23 (masthead moon/sun, rail event title), `small_knock` 20 (countdown)
+- `Archivo-SemiBold.ttf` — `strong` 24 (message header, AQI)
+- All others (`AtkinsonHyperlegible`, `ElmsSans`, `Doto`, `EncodeSansCondensed`, `AntonSC`, `Aldrich`, `Oregano`, `BilboSwashCaps`) — available, not active
 
-Atkinson has no `↑↓☂` glyphs — sunrise/sunset triangles and rain drops are drawn with `draw_tri()` / `draw_drop()` polygons.
+Day/due labels (DZIŚ/JUTRO/+N, forecast abbrevs) `.upper()`-ed at draw time — lang toml strings stay lowercase. Archivo has no `↑↓☂` glyphs — sunrise/sunset triangles and rain drops are drawn with `draw_tri()` / `draw_drop()` polygons.
 
 **To add Google Font:** fetch CSS from `fonts.googleapis.com`, extract `.ttf` URL, `curl` into `fnt/`, load via `ImageFont.truetype`.
 
@@ -320,7 +323,7 @@ y=54 ├──────────────┬─────────
      │ NASTĘPNE box │ NADCHODZĄCE (calendar)    │ ┌─ CLAUDE AI ─┐ │
      │ (black, y=64)│ rows: sq|day|time|title   │ │ 2 bars      │ │
      │ icon + temp  │ tasks (checkbox rows)     │ ├─ message ───┤ │
-     │ b52 + UV b36 │ (x404–892, floor y=382)   │ │ (preempts)  │ │
+     │ hero 130 +UV │ (x404–892, floor y=382)   │ │ (preempts)  │ │
      │ hum/pres/wind│                           │ └─────────────┘ │
      │ (x0–380)     │                           │                 │
 y=390├──────────────┴───────────────────────────┤                 │
@@ -333,12 +336,12 @@ y=480└────────────────────────
 - `rail_w = 380` — left rail width; divider at x=388, content starts at y=64 (BAND_H+10)
 - `mid_x = 404`, `mid_w ≈ 488` — middle column; `MID_FLOOR = 382`, `row_h = 33`
 - `c3x = 916`, `c3w = 432` — col3; divider at x=904
-- Forecast strip: `sy = 390`, spans x20–892; icon always 40px; fonts b22/b28/r22
+- Forecast strip: `sy = 390`, spans x20–892; icon always 40px; fonts fc_day/fc_hi/fc_lo
 - Col3 slots: `SLOT_H = 130`, `SLOT_GAP = 6`, first at y=64
 
 **Left rail order (top to bottom):**
-- NASTĘPNE next-event box (black bg, y=64, h=108): header "NASTĘPNE" (b22, yellow) + countdown right-aligned (r20, yellow); separator at y+34; time (b36) + title (r22, up to 2 lines) vertically centered in y+36–y+104; yellow if family calendar, white if personal
-- Current weather starts at y=180: icon 70×70, temperature b52, UV b36, detail rows r24; `ly = ry + 90`
+- NASTĘPNE next-event box (black bg, y=64, h=108): tracked header "NASTĘPNE" (label_knock, yellow, y+5) + countdown right-aligned (small_knock, yellow); separator at y+34; time (next_time 44) + title (body_knock, up to 2 lines) vertically centered in y+36–y+104; yellow if family calendar, white if personal
+- Current weather starts at y=180: icon 70×70, hero temp 130 + raised ° at 52, UV box right of number; detail rows (body 24) at `ly = ry + 116`
 
 **Color rules:** red = urgent (event <3h, today's forecast label, rain ≥60%, UV ≥6 box, usage bar ≥80%, AQI ≥60 box). Yellow = accents (family-calendar squares, masthead triangles, holiday, card labels on black, AQI 40–59).
 
@@ -354,7 +357,7 @@ Col3 shows up to 3 messages sent over the network. Slots without messages show t
 
 **Slot geometry:** 3 slots below masthead — `SLOT_H = 130`, `SLOT_GAP = 6`, first slot at y=64.
 
-**Layout inside each message slot:** header (`b24`) at top-left, "X ago" timestamp at top-right (`r20`), separator line, body (`r22`, max 2 lines). Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
+**Layout inside each message slot:** header (`strong`) at top-left, "X ago" timestamp at top-right (`small`), separator line, body (`body22`, max 2 lines). Timestamp formats: `Xs ago`, `Xm ago`, `Xh Ym ago`, `Xh ago`, `Xd ago`, `Xw Yd ago`, `Xw ago`, `Xmo ago`.
 
 **message_server.py** runs as a separate systemd service (`dashboard-message.service`) and listens on port 5000.
 

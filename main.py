@@ -611,6 +611,16 @@ def time_ago(ts):
     return f"{months}mo ago"
 
 
+TRACKING = 2  # +px letterspacing for caps labels
+
+
+def draw_tracked(draw, xy, text, font, fill, tracking=TRACKING):
+    x, y = xy
+    for ch in text:
+        draw.text((x, y), ch, font=font, fill=fill)
+        x += font.getlength(ch) + tracking
+
+
 def wrap_text(text, font, max_width):
     words = text.split()
     lines = []
@@ -704,8 +714,8 @@ def draw_drop(draw, x, y, size=13, fill='black'):
 
 
 def draw_usage_bar(draw, fonts, x, y, w, pct, label, sub):
-    draw.text((x, y), label, font=fonts['r20'], fill='black')
-    draw.text((x + w - fonts['r20'].getlength(sub), y), sub, font=fonts['r20'], fill='black')
+    draw.text((x, y), label, font=fonts['small'], fill='black')
+    draw.text((x + w - fonts['small'].getlength(sub), y), sub, font=fonts['small'], fill='black')
     by = y + 26
     draw.rectangle((x, by, x + w, by + 11), outline='black', width=2)
     fill_w = int((w - 4) * min(pct / 100.0, 1.0))
@@ -716,7 +726,7 @@ def draw_usage_bar(draw, fonts, x, y, w, pct, label, sub):
 
 def draw_next_event_card(draw, fonts, x, w, top, h, ev, now_utc, today_date):
     draw.rectangle((x, top, x + w, top + h), fill='black')
-    draw.text((x + 16, top + 8), STRINGS.get('next_title', 'NEXT'), font=fonts['b22'], fill='yellow')
+    draw.text((x + 16, top + 8), STRINGS.get('next_title', 'NEXT'), font=fonts['label_knock'], fill='yellow')
     if ev.get('allday'):
         delta = (ev['event_date'] - today_date).days
         if delta == 0:
@@ -742,11 +752,11 @@ def draw_next_event_card(draw, fonts, x, w, top, h, ev, now_utc, today_date):
             else:
                 countdown = STRINGS.get('next_in_m', 'in {minutes}m').format(minutes=minutes)
     if countdown:
-        draw.text((x + w - 16 - fonts['b22'].getlength(countdown), top + 8),
-                  countdown, font=fonts['b22'], fill='yellow')
-    draw.text((x + 16, top + 36), big, font=fonts['b48'], fill='white')
-    draw.text((x + 16, top + 94), fit_text(ev['title'], fonts['r24'], w - 32),
-              font=fonts['r24'], fill='white')
+        draw.text((x + w - 16 - fonts['label_knock'].getlength(countdown), top + 8),
+                  countdown, font=fonts['label_knock'], fill='yellow')
+    draw.text((x + 16, top + 36), big, font=fonts['next_time'], fill='white')
+    draw.text((x + 16, top + 94), fit_text(ev['title'], fonts['body_knock'], w - 32),
+              font=fonts['body_knock'], fill='white')
 
 
 def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
@@ -759,16 +769,16 @@ def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
                and now_utc < dt_end)
     if ongoing:
         header = STRINGS.get('current_title', 'NOW')
-        draw.text((x + 12, y + 8), header, font=fonts['b22'], fill='yellow')
+        draw_tracked(draw, (x + 12, y + 5), header, fonts['label_knock'], 'yellow')
         draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
         t_start = ev['dt'].astimezone().strftime('%H:%M')
         t_end   = dt_end.astimezone().strftime('%H:%M')
-        TIME_LINE_H = 30   # b26 line height
+        TIME_LINE_H = 30   # cal_time line height
         time_block_h = TIME_LINE_H * 2
-        time_font = fonts['b26']
+        time_font = fonts['cal_time']
         time_w = int(time_font.getlength(t_start))
         title_max_w = w - 34 - time_w
-        lines = wrap_text(ev['title'], fonts['r22'], title_max_w)[:2]
+        lines = wrap_text(ev['title'], fonts['body_knock'], title_max_w)[:2]
         LINE_H, LABEL_LINE_H = 28, 26
         label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
         block_h = max(time_block_h, label_h)
@@ -779,9 +789,10 @@ def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
         draw.text((x + 12, time_y + TIME_LINE_H),   t_end,   font=time_font, fill=tc)
         tx = x + 12 + time_w + 10
         for i, line in enumerate(lines):
-            draw.text((tx, title_y + i * LINE_H), line, font=fonts['r22'], fill=tc)
+            draw.text((tx, title_y + i * LINE_H), line, font=fonts['body_knock'], fill=tc)
     else:
-        draw.text((x + 12, y + 8), STRINGS.get('next_title', 'NEXT'), font=fonts['b22'], fill='yellow')
+        draw_tracked(draw, (x + 12, y + 5), STRINGS.get('next_title', 'NEXT'),
+                     fonts['label_knock'], 'yellow')
         if ev.get('allday'):
             delta = (ev['event_date'] - today_date).days
             if delta == 0:
@@ -807,31 +818,32 @@ def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
                 else:
                     countdown = STRINGS.get('next_in_m', 'in {minutes}m').format(minutes=minutes)
         if countdown:
-            draw.text((x + w - 12 - int(fonts['r20'].getlength(countdown)), y + 10),
-                      countdown, font=fonts['r20'], fill='yellow')
+            draw.text((x + w - 12 - int(fonts['small_knock'].getlength(countdown)), y + 10),
+                      countdown, font=fonts['small_knock'], fill='yellow')
         draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
-        time_w = int(fonts['b36'].getlength(big))
+        time_w = int(fonts['next_time'].getlength(big))
         title_max_w = w - 34 - time_w
-        lines = wrap_text(ev['title'], fonts['r22'], title_max_w)[:2]
-        TIME_H, LINE_H, LABEL_LINE_H = 40, 28, 26
+        lines = wrap_text(ev['title'], fonts['body_knock'], title_max_w)[:2]
+        TIME_H, LINE_H, LABEL_LINE_H = 48, 28, 26
         label_h = LABEL_LINE_H + (len(lines) - 1) * LINE_H
         block_h = max(TIME_H, label_h)
         block_y = y + 36 + (68 - block_h) // 2
         time_y  = block_y + (block_h - TIME_H) // 2
         title_y = block_y + (block_h - label_h) // 2
-        draw.text((x + 12, time_y), big, font=fonts['b36'], fill=tc)
-        tx = x + 12 + time_w + 10
+        draw.text((x + 12, time_y), big, font=fonts['next_time'], fill=tc)
+        tx = x + 12 + time_w + 12
         for i, line in enumerate(lines):
-            draw.text((tx, title_y + i * LINE_H), line, font=fonts['r22'], fill=tc)
+            draw.text((tx, title_y + i * LINE_H), line, font=fonts['body_knock'], fill=tc)
 
 
 def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):
     if separator:
         draw.line((x + 8, top - 4, x + w, top - 4), fill='black', width=1)
-    draw.text((x + 16, top + 4), STRINGS.get('claude_card', 'CLAUDE AI'), font=fonts['b22'], fill='black')
+    draw_tracked(draw, (x + 16, top + 4), STRINGS.get('claude_card', 'CLAUDE AI'),
+                 fonts['label'], 'black')
     if claude.get('error'):
         draw.text((x + 16, top + 40), STRINGS.get('claude_error', 'Claude Usage Error'),
-                  font=fonts['r22'], fill='black')
+                  font=fonts['body22'], fill='black')
         return
     pct_5h = claude.get('five_hour', {}).get('utilization', 0)
     pct_7d = claude.get('seven_day', {}).get('utilization', 0)
@@ -857,16 +869,16 @@ def draw_message_slot(draw, fonts, x, w, top, h, msg):
     created_at = msg.get('created_at')
     if header or created_at:
         if header:
-            draw.text((x + 16, y), fit_text(header, fonts['b24'], w - 140), font=fonts['b24'], fill=tc)
+            draw.text((x + 16, y), fit_text(header, fonts['strong'], w - 140), font=fonts['strong'], fill=tc)
         if created_at:
             ago = time_ago(created_at)
-            draw.text((x + w - 16 - fonts['r20'].getlength(ago), y + 4), ago, font=fonts['r20'], fill=tc)
+            draw.text((x + w - 16 - fonts['small'].getlength(ago), y + 4), ago, font=fonts['small'], fill=tc)
         draw.line((x + 16, top + 44, x + w - 16, top + 44), fill=tc, width=1)
         y = top + 54
     body = msg.get('body', '').strip()
     if body:
-        for line in wrap_text(body, fonts['r22'], w - 32)[:2]:
-            draw.text((x + 16, y), line, font=fonts['r22'], fill=tc)
+        for line in wrap_text(body, fonts['body22'], w - 32)[:2]:
+            draw.text((x + 16, y), line, font=fonts['body22'], fill=tc)
             y += 28
 
 
@@ -906,31 +918,31 @@ def render_screen(epd, fonts):
     draw.rectangle((0, 0, total_width, BAND_H), fill='black')
     date_line = STRINGS.get('masthead_date', '{weekday} {day} {month}').format(
         weekday=weekdays_full[dt.weekday()], day=dt.day, month=months_gen[dt.month - 1]).upper()
-    draw.text((20, 8), date_line, font=fonts['b34'], fill='white')
+    draw.text((20, 8), date_line, font=fonts['masthead'], fill='white')
     holiday = polish_holiday(today_date)
     if holiday:
-        hx = max(445, 20 + fonts['b34'].getlength(date_line) + 30)
-        draw.text((hx, 12), holiday, font=fonts['b28'], fill='yellow')
+        hx = max(445, 20 + fonts['masthead'].getlength(date_line) + 30)
+        draw.text((hx, 12), holiday, font=fonts['holiday'], fill='yellow')
 
     # right-aligned chain: sunrise/sunset · moon · AQI
     rx = total_width - 20
     if aqi:
         aqi_s = f"AQI {aqi}"
-        aw = fonts['b24'].getlength(aqi_s)
+        aw = fonts['strong'].getlength(aqi_s)
         if aqi >= 60:
             draw.rectangle((rx - aw - 10, 8, total_width - 12, BAND_H - 8), fill='red')
-            draw.text((rx - aw - 2, 14), aqi_s, font=fonts['b24'], fill='white')
+            draw.text((rx - aw - 2, 14), aqi_s, font=fonts['strong'], fill='white')
         else:
-            draw.text((rx - aw, 14), aqi_s, font=fonts['b24'],
+            draw.text((rx - aw, 14), aqi_s, font=fonts['strong'],
                       fill='yellow' if aqi >= 40 else 'white')
         rx -= aw + 44
 
     moon_names = STRINGS.get('moon_phases', [''] * 8)
     moon_idx = moon_phase_index(dt)
     moon_name = moon_names[moon_idx] if len(moon_names) >= 8 else ''
-    moon_w = 32 + fonts['r24'].getlength(moon_name)
+    moon_w = 32 + fonts['body_knock'].getlength(moon_name)
     draw_icon(draw, int(rx - moon_w), 15, f"icon_moon_phase_{moon_idx}", (24, 24), is_white=True)
-    draw.text((rx - moon_w + 32, 14), moon_name, font=fonts['r24'], fill='white')
+    draw.text((rx - moon_w + 32, 14), moon_name, font=fonts['body_knock'], fill='white')
     rx -= moon_w + 44
 
     daily = weather.get('daily', {})
@@ -938,13 +950,13 @@ def render_screen(epd, fonts):
     d_sunset = daily.get('sunset', [])
     sr_time = d_sunrise[0][11:16] if d_sunrise else '--:--'
     ss_time = d_sunset[0][11:16] if d_sunset else '--:--'
-    sun_w = 36 + fonts['r24'].getlength(sr_time) + 38 + fonts['r24'].getlength(ss_time)
+    sun_w = 36 + fonts['body_knock'].getlength(sr_time) + 38 + fonts['body_knock'].getlength(ss_time)
     sx = rx - sun_w
     draw_tri(draw, sx, 20, 13, up=True, fill='yellow')
-    draw.text((sx + 18, 14), sr_time, font=fonts['r24'], fill='white')
-    sx2 = sx + 18 + fonts['r24'].getlength(sr_time) + 20
+    draw.text((sx + 18, 14), sr_time, font=fonts['body_knock'], fill='white')
+    sx2 = sx + 18 + fonts['body_knock'].getlength(sr_time) + 20
     draw_tri(draw, sx2, 20, 13, up=False, fill='yellow')
-    draw.text((sx2 + 18, 14), ss_time, font=fonts['r24'], fill='white')
+    draw.text((sx2 + 18, 14), ss_time, font=fonts['body_knock'], fill='white')
 
     # --- LEFT RAIL (current weather) ---
     if 'current' in weather:
@@ -956,30 +968,35 @@ def render_screen(epd, fonts):
         is_day = cur.get('is_day', 1)
 
         ry = BAND_H + 10 + 108 + 8  # below next event box (64+108+8=180)
-        draw_icon(draw, 20, ry + 2, get_weather_icon(w_code, is_day), (70, 70))
-        temp_s = f"{math.floor(temp + 0.5)}°"
-        draw.text((104, ry), temp_s, font=fonts['b52'], fill='black')
+        draw_icon(draw, 20, ry + 8, get_weather_icon(w_code, is_day), (70, 70))
+        # hero temperature: big number + degree at ~40% size, raised
+        temp_s = f"{math.floor(temp + 0.5)}"
+        hx, hy = 100, ry - 14
+        draw.text((hx, hy), temp_s, font=fonts['hero'], fill='black')
+        nb = draw.textbbox((hx, hy), temp_s, font=fonts['hero'])
+        draw.text((nb[2] + 4, nb[1] - 6), '°', font=fonts['hero_deg'], fill='black')
 
-        uvx = max(220, 104 + int(fonts['b52'].getlength(temp_s)) + 14)
-        uvy = ry + 4
-        draw.text((uvx, uvy), 'UV', font=fonts['r20'], fill='black')
+        uvx = min(rail_w - 70, nb[2] + 44)
+        draw.text((uvx + 6, ry - 8), 'UV', font=fonts['small'], fill='black')
         uv_rounded = math.floor(cur.get('uv_index', 0.0) + 0.5)
+        uv_s = str(uv_rounded)
+        uw = fonts['uv'].getlength(uv_s)
         if uv_rounded >= 6:
-            draw.rectangle((uvx - 4, uvy + 22, uvx + 44, uvy + 64), fill='red')
-            draw.text((uvx + 4, uvy + 24), str(uv_rounded), font=fonts['b36'], fill='white')
+            draw.rectangle((uvx - 4, ry + 14, uvx + 44, ry + 56), fill='red')
+            draw.text((uvx - 4 + (48 - uw) / 2, ry + 14), uv_s, font=fonts['uv'], fill='white')
         else:
-            draw.text((uvx + 2, uvy + 20), str(uv_rounded), font=fonts['b36'], fill='black')
+            draw.text((uvx - 4 + (48 - uw) / 2, ry + 14), uv_s, font=fonts['uv'], fill='black')
 
-        ly = ry + 90
+        ly = ry + 116
         draw.text((20, ly), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum),
-                  font=fonts['r24'], fill='black')
-        draw.text((20, ly + 36), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=round(pres)),
-                  font=fonts['r24'], fill='black')
+                  font=fonts['body'], fill='black')
+        draw.text((20, ly + 32), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=round(pres)),
+                  font=fonts['body'], fill='black')
         wind_spd = cur.get('wind_speed_10m', 0)
         wind_deg = cur.get('wind_direction_10m', 0)
-        draw_icon(draw, 20, ly + 72, 'icon_wind', (26, 26))
-        draw.text((52, ly + 72), f"{math.floor(wind_spd + 0.5)} km/h {wind_dir_label(wind_deg)}",
-                  font=fonts['r24'], fill='black')
+        draw_icon(draw, 20, ly + 66, 'icon_wind', (26, 26))
+        draw.text((52, ly + 64), f"{math.floor(wind_spd + 0.5)} km/h {wind_dir_label(wind_deg)}",
+                  font=fonts['body'], fill='black')
 
     draw.line((rail_w + 8, BAND_H + 10, rail_w + 8, MID_FLOOR), fill='black', width=1)
 
@@ -991,7 +1008,8 @@ def render_screen(epd, fonts):
     # --- MIDDLE (calendar + tasks, flow layout) ---
     y = BAND_H + 12
     if ENABLE_CALENDAR:
-        draw.text((mid_x, y), STRINGS.get('calendar_title', 'UPCOMING'), font=fonts['b26'], fill='black')
+        draw_tracked(draw, (mid_x, y), STRINGS.get('calendar_title', 'UPCOMING'),
+                     fonts['label'], 'black')
         y += 42
         if calendar_events:
             reserve = (row_h * min(len(tasks_items), 2) + 6) if (ENABLE_TASKS and tasks_items) else 0
@@ -1011,16 +1029,16 @@ def render_screen(epd, fonts):
                     day_label = STRINGS.get('calendar_tomorrow', 'tomorrow')
                 else:
                     day_label = f"+{delta}"
-                draw.text((mid_x + 28, y), day_label, font=fonts['r24'], fill=color)
+                draw.text((mid_x + 28, y + 2), day_label.upper(), font=fonts['cal_day'], fill=color)
                 if not ev.get('allday'):
-                    draw.text((mid_x + 92, y), dt_ev.astimezone().strftime('%H:%M'),
-                              font=fonts['b24'], fill=color)
-                draw.text((mid_x + 164, y), fit_text(ev['title'], fonts['r24'], mid_w - 170),
-                          font=fonts['r24'], fill=color)
+                    draw.text((mid_x + 122, y), dt_ev.astimezone().strftime('%H:%M'),
+                              font=fonts['cal_time'], fill=color)
+                draw.text((mid_x + 200, y), fit_text(ev['title'], fonts['body'], mid_w - 206),
+                          font=fonts['body'], fill=color)
                 y += row_h
         else:
             draw.text((mid_x, y), STRINGS.get('calendar_empty', 'No upcoming events'),
-                      font=fonts['r24'], fill='black')
+                      font=fonts['body'], fill='black')
             y += row_h
 
     if ENABLE_TASKS:
@@ -1033,10 +1051,10 @@ def render_screen(epd, fonts):
                 due = task.get('due', '')
                 tx = mid_x + 28
                 if due:
-                    draw.text((tx, y), due, font=fonts['b24'], fill='black')
-                    tx = mid_x + 92
-                draw.text((tx, y), fit_text(task['title'], fonts['r24'], mid_x + mid_w - tx - 6),
-                          font=fonts['r24'], fill='black')
+                    draw.text((tx, y + 2), due.upper(), font=fonts['cal_day'], fill='black')
+                    tx = mid_x + 122
+                draw.text((tx, y + 1), fit_text(task['title'], fonts['body22'], mid_x + mid_w - tx - 6),
+                          font=fonts['body22'], fill='black')
                 y += row_h
 
     # --- FORECAST STRIP (bottom, rail + middle width) ---
@@ -1060,21 +1078,21 @@ def render_screen(epd, fonts):
                 day_label = weekdays_list[day_dt.weekday()]
             except Exception:
                 day_label = d_times[i][-5:] if d_times[i] else ''
-            draw.text((ox + 12, sy + 6), day_label, font=fonts['b22'], fill='black')
+            draw_tracked(draw, (ox + 12, sy + 8), day_label.upper(), fonts['fc_day'], 'black')
             rain = int(d_rain[i]) if i < len(d_rain) and d_rain[i] is not None else 0
             if rain >= 30:
                 rc = 'red' if rain >= 60 else 'black'
                 rain_s = f"{rain}%"
-                px = ox + cell_w - 12 - fonts['b22'].getlength(rain_s)
-                draw_drop(draw, int(px - 16), sy + 10, 11, fill=rc)
-                draw.text((px, sy + 8), rain_s, font=fonts['b22'], fill=rc)
-            draw_icon(draw, ox + 12, sy + 32,
+                px = ox + cell_w - 12 - fonts['fc_rain'].getlength(rain_s)
+                draw_drop(draw, int(px - 16), sy + 12, 11, fill=rc)
+                draw.text((px, sy + 8), rain_s, font=fonts['fc_rain'], fill=rc)
+            draw_icon(draw, ox + 12, sy + 36,
                       get_weather_icon(d_codes[i] if i < len(d_codes) else 0, 1), (icon_sz, icon_sz))
-            tx = ox + 12 + icon_sz + 8
+            tx = ox + 12 + icon_sz + 10
             tmax = math.floor(d_tmax[i] + 0.5) if i < len(d_tmax) else 0
             tmin = math.floor(d_tmin[i] + 0.5) if i < len(d_tmin) else 0
-            draw.text((tx, sy + 32), f"{tmax}°", font=fonts['b28'], fill='black')
-            draw.text((tx, sy + 60), f"{tmin}°", font=fonts['r22'], fill='black')
+            draw.text((tx, sy + 34), f"{tmax}°", font=fonts['fc_hi'], fill='black')
+            draw.text((tx, sy + 64), f"{tmin}°", font=fonts['fc_lo'], fill='black')
 
     # --- COLUMN 3 (messages preempt fallback cards top-down) ---
     draw.line((c3x - 12, BAND_H + 10, c3x - 12, 470), fill='black', width=1)
@@ -1121,22 +1139,33 @@ def main():
         def load_font(name, size):
             return ImageFont.truetype(os.path.join(FONT_DIR, name), size)
 
-        AT_R = 'AtkinsonHyperlegible-Regular.ttf'
-        AT_B = 'AtkinsonHyperlegible-Bold.ttf'
+        # Direction C — Brutalist poster (Archivo family)
+        AR_BLK = 'ArchivoBlack-Regular.ttf'
+        AR_NB = 'ArchivoNarrow-Bold.ttf'
+        AR_R = 'Archivo-Regular.ttf'
+        AR_M = 'Archivo-Medium.ttf'
+        AR_SB = 'Archivo-SemiBold.ttf'
         fonts = {
-            'r20': load_font(AT_R, 20),
-            'r22': load_font(AT_R, 22),
-            'r24': load_font(AT_R, 24),
-            'r26': load_font(AT_R, 26),
-            'b22': load_font(AT_B, 22),
-            'b24': load_font(AT_B, 24),
-            'b26': load_font(AT_B, 26),
-            'b28': load_font(AT_B, 28),
-            'b34': load_font(AT_B, 34),
-            'b36': load_font(AT_B, 36),
-            'b48': load_font(AT_B, 48),
-            'b52': load_font(AT_B, 52),
-            'b96': load_font(AT_B, 96),
+            'masthead':    load_font(AR_BLK, 32),  # date on black
+            'holiday':     load_font(AR_NB, 28),   # holiday name on black
+            'label':       load_font(AR_NB, 24),   # tracked caps labels
+            'label_knock': load_font(AR_NB, 24),   # labels on black (26 clips Ę into separator)
+            'hero':        load_font(AR_BLK, 130), # temperature number
+            'hero_deg':    load_font(AR_BLK, 52),  # raised degree sign
+            'next_time':   load_font(AR_BLK, 44),  # NASTĘPNE time
+            'cal_time':    load_font(AR_NB, 26),   # calendar times
+            'cal_day':     load_font(AR_NB, 24),   # DZIŚ/JUTRO/+N column (red rows >= 24px)
+            'fc_day':      load_font(AR_NB, 24),   # forecast day abbrevs
+            'fc_hi':       load_font(AR_BLK, 30),  # forecast hi temps
+            'fc_lo':       load_font(AR_R, 22),    # forecast lo temps
+            'fc_rain':     load_font(AR_NB, 24),   # rain % (red >= 24px)
+            'body':        load_font(AR_R, 24),    # event titles, weather details
+            'body22':      load_font(AR_R, 22),    # message body, tasks
+            'body_knock':  load_font(AR_M, 23),    # body on black (bumped)
+            'strong':      load_font(AR_SB, 24),   # message header, AQI
+            'uv':          load_font(AR_BLK, 36),  # UV value
+            'small':       load_font(AR_R, 20),    # timestamps, bar subs
+            'small_knock': load_font(AR_M, 20),    # small on black (bumped)
         }
 
         refresh_counter = 0

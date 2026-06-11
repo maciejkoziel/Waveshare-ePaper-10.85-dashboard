@@ -775,8 +775,11 @@ def draw_next_event_rail(draw, fonts, x, y, w, ev, now_utc, today_date):
         draw.text((x + w - 12 - int(fonts['r20'].getlength(countdown)), y + 10),
                   countdown, font=fonts['r20'], fill='yellow')
     draw.line((x + 8, y + 34, x + w - 8, y + 34), fill='white', width=1)
-    draw.text((x + 12, y + 40), big, font=fonts['b36'], fill='white')
-    draw.text((x + 12, y + 82), fit_text(ev['title'], fonts['r22'], w - 24), font=fonts['r22'], fill='white')
+    tc = 'yellow' if ev.get('calendar') == 'family' else 'white'
+    time_w = int(fonts['b36'].getlength(big))
+    draw.text((x + 12, y + 40), big, font=fonts['b36'], fill=tc)
+    title = fit_text(ev['title'], fonts['r22'], w - 24 - time_w - 10)
+    draw.text((x + 12 + time_w + 10, y + 47), title, font=fonts['r22'], fill=tc)
 
 
 def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):

@@ -910,7 +910,7 @@ def render_screen(epd, fonts):
         w_code = cur.get('weather_code', 0)
         is_day = cur.get('is_day', 1)
 
-        ry = BAND_H + 14
+        ry = BAND_H + 10 + 108 + 8  # below next event box (64+108+8=180)
         draw_icon(draw, 20, ry + 2, get_weather_icon(w_code, is_day), (70, 70))
         temp_s = f"{math.floor(temp + 0.5)}°"
         draw.text((104, ry), temp_s, font=fonts['b52'], fill='black')
@@ -936,12 +936,11 @@ def render_screen(epd, fonts):
         draw.text((52, ly + 72), f"{math.floor(wind_spd + 0.5)} km/h {wind_dir_label(wind_deg)}",
                   font=fonts['r24'], fill='black')
 
-    draw.line((rail_w + 8, BAND_H + 14, rail_w + 8, MID_FLOOR), fill='black', width=1)
+    draw.line((rail_w + 8, BAND_H + 10, rail_w + 8, MID_FLOOR), fill='black', width=1)
 
-    # next event compact widget in left rail, below weather detail rows
+    # next event at top of left rail
     if ENABLE_CALENDAR and calendar_events:
-        # ry=68, ly=ry+90=158, wind at ly+72=230, icon 26px + 8px gap = 264
-        draw_next_event_rail(draw, fonts, 0, BAND_H + 14 + 90 + 72 + 34, rail_w,
+        draw_next_event_rail(draw, fonts, 0, BAND_H + 10, rail_w,
                              calendar_events[0], now_utc, today_date)
 
     # --- MIDDLE (calendar + tasks, flow layout) ---

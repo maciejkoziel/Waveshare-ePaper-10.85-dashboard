@@ -264,7 +264,7 @@ enable_spotify     = false
 enable_calendar    = true
 ```
 
-Middle column: calendar + tasks. Left rail always weather. Col3: messages preempt fallback cards (next event, Claude usage). Strava/Bambu/Roborock/Antigravity widgets removed 2026-06 — old toggles in `settings_local.toml` are ignored. Spotify fetch exists but is not rendered in the current layout.
+Middle column: calendar + tasks. Left rail: NASTĘPNE box (top) + weather (below). Col3: messages preempt CLAUDE AI card. Strava/Bambu/Roborock/Antigravity widgets removed 2026-06 — old toggles in `settings_local.toml` are ignored. Spotify fetch exists but is not rendered in the current layout.
 
 ## Font Notes
 
@@ -317,32 +317,38 @@ y=0  ┌────────────────────────
      │ MASTHEAD (black band): date · holiday · ▲▼sun · moon · AQI │
 y=54 ├──────────────┬───────────────────────────┬─────────────────┤
      │ left rail    │ middle (flow)             │ col3 (3 slots)  │
-     │ icon + temp  │ NADCHODZĄCE (calendar)    │ ┌─ NASTĘPNE ──┐ │
-     │ b96 + UV b52 │ rows: sq|day|time|title   │ │ black card  │ │
-     │ hum/pres/wind│ tasks (checkbox rows)     │ ├─ CLAUDE AI ─┤ │
-     │ (x0–380)     │ (x404–892, floor y=336)   │ │ 2 bars      │ │
-y=344├──────────────┴───────────────────────────┤ ├─ message ───┤ │
-     │ FORECAST STRIP: day+rain% / icon / hi+lo │ │ (preempts)  │ │
+     │ NASTĘPNE box │ NADCHODZĄCE (calendar)    │ ┌─ CLAUDE AI ─┐ │
+     │ (black, y=64)│ rows: sq|day|time|title   │ │ 2 bars      │ │
+     │ icon + temp  │ tasks (checkbox rows)     │ ├─ message ───┤ │
+     │ b52 + UV b36 │ (x404–892, floor y=382)   │ │ (preempts)  │ │
+     │ hum/pres/wind│                           │ └─────────────┘ │
+     │ (x0–380)     │                           │                 │
+y=390├──────────────┴───────────────────────────┤                 │
+     │ FORECAST STRIP: day+rain% / icon / hi+lo │                 │
 y=480└───────────────────────────────────────────┴─────────────────┘
 ```
 
 **Key constants (`render_screen`):**
 - `BAND_H = 54` — masthead height
-- `rail_w = 380` — left rail width; divider at x=388
-- `mid_x = 404`, `mid_w ≈ 488` — middle column; `MID_FLOOR = 336`, `row_h = 33`
+- `rail_w = 380` — left rail width; divider at x=388, content starts at y=64 (BAND_H+10)
+- `mid_x = 404`, `mid_w ≈ 488` — middle column; `MID_FLOOR = 382`, `row_h = 33`
 - `c3x = 916`, `c3w = 432` — col3; divider at x=904
-- Forecast strip: `sy = 344`, spans x20–892; cells `strip_w // n_days`; compact fonts when `cell_w < 165` (7-day mode)
+- Forecast strip: `sy = 390`, spans x20–892; icon always 40px; fonts b22/b28/r22
 - Col3 slots: `SLOT_H = 130`, `SLOT_GAP = 6`, first at y=64
+
+**Left rail order (top to bottom):**
+- NASTĘPNE next-event box (black bg, y=64, h=108): header "NASTĘPNE" (b22, yellow) + countdown right-aligned (r20, yellow); separator at y+34; time (b36) + title (r22, up to 2 lines) vertically centered in y+36–y+104; yellow if family calendar, white if personal
+- Current weather starts at y=180: icon 70×70, temperature b52, UV b36, detail rows r24; `ly = ry + 90`
 
 **Color rules:** red = urgent (event <3h, today's forecast label, rain ≥60%, UV ≥6 box, usage bar ≥80%, AQI ≥60 box). Yellow = accents (family-calendar squares, masthead triangles, holiday, card labels on black, AQI 40–59).
 
-**Col3 slot priority:** messages always win, fill slots top-down after fallback cards yield. Cards order: NASTĘPNE (next event hero, only if calendar on + events exist), CLAUDE AI (if enabled). 3 messages → no cards visible.
+**Col3 slot priority:** messages always win, fill slots top-down after fallback cards yield. CLAUDE AI card always at slot 0 (if enabled). NASTĘPNE is no longer a col3 card — it lives in the left rail. 3 messages → no cards visible.
 
 **i18n:** `lang/pl.toml` and `lang/en.toml`. All Polish strings use full diacritics. `months_genitive` for masthead date ("11 CZERWCA"), `wind_dirs` for compass labels, `next_in_*` for countdown formats. Holiday names hardcoded in `main.py` (PL proper nouns, not translated).
 
 ## Custom Message Widget (col3)
 
-Col3 shows up to 3 messages sent over the network. Slots without messages show fallback cards (NASTĘPNE next-event hero, CLAUDE AI usage) — see Layout section for preemption rules.
+Col3 shows up to 3 messages sent over the network. Slots without messages show the CLAUDE AI card — see Layout section for preemption rules.
 
 **Queue:** up to 3 messages, round-robin — newest replaces oldest. Each message stored with the sender's IP address.
 

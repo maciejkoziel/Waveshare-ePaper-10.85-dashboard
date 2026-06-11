@@ -9,13 +9,9 @@ A fully functional E-ink dashboard running on a Raspberry Pi. Designed for the W
 
 * **4-color display support (G variant):** Fully ported to the `epd10in85g` driver — supports Red, Yellow, Black, and White on the Waveshare 10.85" e-Paper (G) panel (SKU 30411). Full refresh only, 180s minimum interval.
 * **Weather:** Real-time temperature, humidity, wind direction/speed, UV index, 5/7-day forecast, sunrise/sunset times, and moon phase using the Open-Meteo API.
-* **Google Calendar:** Upcoming events from your primary Google Calendar.
+* **Air Quality Index (AQI):** European AQI from Open-Meteo, shown in the masthead.
+* **Google Calendar:** Upcoming events — next event shown as a hero card in the left rail, full list in the middle column.
 * **Google Tasks:** Active tasks from your Google Tasks lists.
-* **Strava Integration:** Total and yearly activity statistics (distance and ride counts), including breakdowns for biking and hiking.
-* **Bambu Lab 3D Printer:** Live monitoring of print status, completion percentage, remaining time, and current layer progress.
-* **Roborock Vacuum:** Live battery level, current status, and cleaned area tracking during active cleaning.
-* **Spotify:** Displays the currently playing track and artist via Last.fm.
-* **Antigravity usage data:** Displays usage data for Antigravity, showing the limit and reset time.
 * **Claude Code usage data:** Displays usage data for Claude Code, showing the 5-hour limit, 7-day limit, and reset times.
 * **Custom message widget:** A dedicated right column that displays up to 3 messages sent over the network via a built-in HTTP server. New messages are added to a queue; the oldest is dropped when the queue is full. Supports header, body, e-ink colors, border, and per-message TTL. Any device on the network can push a message with a single `curl` command, and DELETE only removes messages sent from that device's IP.
 
@@ -90,30 +86,14 @@ All config lives in `settings_local.toml` in the project directory (not committe
 
 ```toml
 [widgets]
-enable_strava      = false
-enable_bambu       = false
-enable_roborock    = false
-enable_antigravity = false
-enable_tasks       = false
-enable_claude      = false
-enable_spotify     = false
-enable_calendar    = false
+enable_tasks    = false
+enable_claude   = false
+enable_spotify  = false
+enable_calendar = false
 
 [location]
 lat = 44.8240855
 lon = 20.4934273
-
-[printer]
-ip          = "192.168.x.x"
-serial      = "YOUR_SERIAL"
-access_code = "YOUR_CODE"
-
-[roborock]
-email = "your@email.com"
-
-[lastfm]
-api_key  = "YOUR_KEY"
-username = "YOUR_USERNAME"
 
 [weather]
 forecast_days = 5   # 5 or 7
@@ -136,23 +116,6 @@ These three share a single OAuth flow:
 1. **Before starting the service**, run `python3 main.py` once in a terminal.
 2. Copy the authorization URL, authorize in a browser, and paste back the redirect URL containing `code=...`.
 3. Tokens are saved to `claude_creds.json`.
-
-### Strava
-1. Create a Strava API Application and note your Client ID and Secret.
-2. **Before starting the service**, run `python3 main.py` — it will print an authorization URL.
-3. Authorize in browser, paste the redirect URL back. Tokens saved to `strava_token.json`.
-
-### Roborock
-1. Set your account email under `[roborock]` in `settings_local.toml`.
-2. **Before starting the service**, run `python3 main.py` — enter the 6-digit OTP sent to your email. Session saved to `roborock_session.pkl`.
-
-### Bambu Lab 3D Printer
-1. On the printer: **Settings -> Network** — note IP, Serial Number, and Access Code.
-2. Set them under `[printer]` in `settings_local.toml`.
-
-### Spotify (via Last.fm)
-1. Connect your Spotify account to Last.fm.
-2. Generate a Last.fm API Key and set `api_key` and `username` under `[lastfm]` in `settings_local.toml`.
 
 ### Custom Message Widget
 The right column (col3) is driven by `message_server.py`, a lightweight HTTP server installed alongside the dashboard by `install-service.sh`.

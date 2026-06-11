@@ -1018,7 +1018,7 @@ def render_screen(epd, fonts):
                     break
                 dt_ev = ev.get('dt')
                 soon = (not ev.get('allday', True) and dt_ev is not None and
-                        0 <= (dt_ev - now_utc).total_seconds() <= 10800)
+                        dt_ev <= now_utc and ev.get('dt_end') is not None and now_utc < ev['dt_end'])
                 color = 'red' if soon else 'black'
                 sq_color = 'black' if ev['calendar'] == 'personal' else 'yellow'
                 draw.rectangle([mid_x + 2, y + 7, mid_x + 16, y + 21], fill=sq_color, outline='black')

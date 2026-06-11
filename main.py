@@ -1253,6 +1253,9 @@ def main():
         epd.Clear()
         epd.PowerOff()
 
+        # Wait for initial weather load before first render (up to 45s)
+        data_store.data_changed.wait(timeout=45)
+
         def load_font(name, size):
             return ImageFont.truetype(os.path.join(FONT_DIR, name), size)
 

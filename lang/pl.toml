@@ -38,6 +38,18 @@ claude_title = "UŻYCIE CLAUDE AI"
 claude_error = "Błąd Claude AI"
 claude_5h    = "Limit 5h: {pct}% (Reset za {time})"
 claude_7d    = "Limit 7d: {pct}% (Reset za {time})"
+claude_card     = "CLAUDE AI"
+claude_5h_short = "5h · {pct}%"
+claude_7d_short = "7d · {pct}%"
+claude_reset    = "reset {time}"
+
+# Masthead / col3 cards
+masthead_date = "{weekday} {day} {month}"
+next_title    = "NASTĘPNE"
+next_in_m     = "za {minutes}m"
+next_in_hm    = "za {hours}g {minutes}m"
+next_in_dh    = "za {days}d {hours}g"
+wind_dirs     = ["Pn", "PnW", "W", "PdW", "Pd", "PdZ", "Z", "PnZ"]
 
 # Time progress
 time_progress_title = "POSTĘP CZASU"
@@ -67,5 +79,6 @@ time_hours_minutes = "{hours}g {minutes}m"
 
 # Date/time formatting
 months        = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"]
+months_genitive = ["Stycznia","Lutego","Marca","Kwietnia","Maja","Czerwca","Lipca","Sierpnia","Września","Października","Listopada","Grudnia"]
 weekdays      = ["Pon","Wt","Śr","Czw","Pt","Sob","Nd"]
 weekdays_full = ["Poniedziałek","Wtorek","Środa","Czwartek","Piątek","Sobota","Niedziela"]

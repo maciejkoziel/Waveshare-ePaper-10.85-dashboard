@@ -38,6 +38,18 @@ claude_title = "CLAUDE AI USAGE"
 claude_error = "Claude Usage Error"
 claude_5h    = "5-Hour Limit: {pct}% (Resets in {time})"
 claude_7d    = "7-Day Limit: {pct}% (Resets in {time})"
+claude_card     = "CLAUDE AI"
+claude_5h_short = "5h · {pct}%"
+claude_7d_short = "7d · {pct}%"
+claude_reset    = "reset {time}"
+
+# Masthead / col3 cards
+masthead_date = "{weekday}, {month} {day}"
+next_title    = "NEXT"
+next_in_m     = "in {minutes}m"
+next_in_hm    = "in {hours}h {minutes}m"
+next_in_dh    = "in {days}d {hours}h"
+wind_dirs     = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
 # Time progress
 time_progress_title = "TIME PROGRESS"
@@ -67,5 +79,6 @@ time_hours_minutes = "{hours}h {minutes}m"
 
 # Date/time formatting
 months   = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+months_genitive = ["January","February","March","April","May","June","July","August","September","October","November","December"]
 weekdays      = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
 weekdays_full = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]

@@ -18,7 +18,7 @@ import calendar
 import urllib.parse
 import tomllib
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, date as date_cls
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance
 from logging.handlers import RotatingFileHandler
 
@@ -94,6 +94,7 @@ except FileNotFoundError:
 # --- API ENDPOINTS ---
 API_ENDPOINTS = {
     'weather': 'http://api.open-meteo.com/v1/forecast',
+    'air_quality': 'http://air-quality-api.open-meteo.com/v1/air-quality',
     'strava_token': 'https://www.strava.com/oauth/token',
     'strava_auth': 'https://www.strava.com/oauth/authorize',
     'strava_activities': 'https://www.strava.com/api/v3/athlete/activities',
@@ -235,6 +236,7 @@ class DataStore:
             'weather': 0, 'strava': 0, 'printer': 0, 'gmail': 0,
             'spotify': 0, 'crypto': 0, 'sysload': 0, 'ping': 0,
             'claude': 0, 'antigravity': 0, 'calendar': 0, 'tasks': 0,
+            'aqi': 0,
         }
         self.data_changed = threading.Event()
         self.last_fingerprint = None
@@ -256,6 +258,9 @@ def get_data_fingerprint(ds):
             ds.claude.get('five_hour', {}).get('utilization'),
             ds.claude.get('seven_day', {}).get('utilization'),
             str(ds.antigravity.get('models', [])),
+            ds.aqi,
+            str(ds.tasks_items),
+            str(ds.weather.get('daily', {}).get('precipitation_probability_max')),
         )
 
 
@@ -538,12 +543,22 @@ def update_data_thread():
         now = time.time()
 
         if now - data_store.last_update['weather'] > 600:
-            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset&timezone=auto&forecast_days={FORECAST_DAYS}"
+            weather_url = f"{API_ENDPOINTS['weather']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code,is_day,uv_index&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,precipitation_probability_max&timezone=auto&forecast_days={FORECAST_DAYS}"
             w_data = fetch_with_retry(weather_url, timeout=30)
             if w_data:
                 with data_store.lock:
                     data_store.weather = w_data
                 data_store.last_update['weather'] = now
+
+        if now - data_store.last_update['aqi'] > 600:
+            aqi_url = f"{API_ENDPOINTS['air_quality']}?latitude={LOCATION_LAT}&longitude={LOCATION_LON}&current=european_aqi"
+            a_data = net.get_json(aqi_url, timeout=30)
+            if a_data:
+                val = a_data.get('current', {}).get('european_aqi')
+                if val is not None:
+                    with data_store.lock:
+                        data_store.aqi = int(round(val))
+            data_store.last_update['aqi'] = now
 
         if ENABLE_STRAVA:
             if now - data_store.last_update['strava'] > 900:
@@ -889,6 +904,166 @@ def moon_phase_index(dt):
     return int((days % 29.53059) / 29.53059 * 8) % 8
 
 
+def easter_date(year):
+    # Anonymous Gregorian algorithm
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month, day = divmod(h + l - 7 * m + 114, 31)
+    return date_cls(year, month, day + 1)
+
+
+PL_HOLIDAYS_FIXED = {
+    (1, 1): 'NOWY ROK',
+    (1, 6): 'TRZECH KRÓLI',
+    (5, 1): 'ŚWIĘTO PRACY',
+    (5, 3): 'KONSTYTUCJA 3 MAJA',
+    (8, 15): 'WNIEBOWZIĘCIE NMP',
+    (11, 1): 'WSZYSTKICH ŚWIĘTYCH',
+    (11, 11): 'ŚWIĘTO NIEPODLEGŁOŚCI',
+    (12, 24): 'WIGILIA',
+    (12, 25): 'BOŻE NARODZENIE',
+    (12, 26): 'DRUGI DZIEŃ ŚWIĄT',
+}
+
+
+def polish_holiday(d):
+    fixed = PL_HOLIDAYS_FIXED.get((d.month, d.day))
+    if fixed:
+        return fixed
+    easter = easter_date(d.year)
+    offset = (d - easter).days
+    return {
+        0: 'WIELKANOC',
+        1: 'PONIEDZIAŁEK WIELKANOCNY',
+        49: 'ZIELONE ŚWIĄTKI',
+        60: 'BOŻE CIAŁO',
+    }.get(offset)
+
+
+def wind_dir_label(deg):
+    dirs = STRINGS.get('wind_dirs', ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'])
+    return dirs[int(((deg + 22.5) % 360) // 45)]
+
+
+def fit_text(text, font, max_w):
+    if font.getlength(text) <= max_w:
+        return text
+    while text and font.getlength(text + '…') > max_w:
+        text = text[:-1]
+    return text + '…'
+
+
+def draw_tri(draw, x, y, size=13, up=True, fill='black'):
+    if up:
+        draw.polygon([(x, y + size), (x + size, y + size), (x + size / 2, y)], fill=fill)
+    else:
+        draw.polygon([(x, y), (x + size, y), (x + size / 2, y + size)], fill=fill)
+
+
+def draw_drop(draw, x, y, size=13, fill='black'):
+    r = size // 2
+    draw.ellipse((x, y + size - 2 * r, x + 2 * r, y + size), fill=fill)
+    draw.polygon([(x, y + size - r), (x + 2 * r, y + size - r), (x + r, y)], fill=fill)
+
+
+def draw_usage_bar(draw, fonts, x, y, w, pct, label, sub):
+    draw.text((x, y), label, font=fonts['r20'], fill='black')
+    draw.text((x + w - fonts['r20'].getlength(sub), y), sub, font=fonts['r20'], fill='black')
+    by = y + 26
+    draw.rectangle((x, by, x + w, by + 11), outline='black', width=2)
+    fill_w = int((w - 4) * min(pct / 100.0, 1.0))
+    if fill_w > 0:
+        draw.rectangle((x + 2, by + 2, x + 2 + fill_w, by + 9),
+                       fill='red' if pct >= 80 else 'black')
+
+
+def draw_next_event_card(draw, fonts, x, w, top, h, ev, now_utc, today_date):
+    draw.rectangle((x, top, x + w, top + h), fill='black')
+    draw.text((x + 16, top + 8), STRINGS.get('next_title', 'NEXT'), font=fonts['b22'], fill='yellow')
+    if ev.get('allday'):
+        delta = (ev['event_date'] - today_date).days
+        if delta == 0:
+            big = STRINGS.get('calendar_today', 'today').upper()
+        elif delta == 1:
+            big = STRINGS.get('calendar_tomorrow', 'tomorrow').upper()
+        else:
+            big = f"+{delta}d"
+        countdown = ''
+    else:
+        big = ev['dt'].astimezone().strftime('%H:%M')
+        secs = (ev['dt'] - now_utc).total_seconds()
+        if secs < 0:
+            countdown = ''
+        else:
+            mins = int(secs // 60)
+            days, rem = divmod(mins, 1440)
+            hours, minutes = divmod(rem, 60)
+            if days > 0:
+                countdown = STRINGS.get('next_in_dh', 'in {days}d {hours}h').format(days=days, hours=hours)
+            elif hours > 0:
+                countdown = STRINGS.get('next_in_hm', 'in {hours}h {minutes}m').format(hours=hours, minutes=minutes)
+            else:
+                countdown = STRINGS.get('next_in_m', 'in {minutes}m').format(minutes=minutes)
+    if countdown:
+        draw.text((x + w - 16 - fonts['b22'].getlength(countdown), top + 8),
+                  countdown, font=fonts['b22'], fill='yellow')
+    draw.text((x + 16, top + 36), big, font=fonts['b48'], fill='white')
+    draw.text((x + 16, top + 94), fit_text(ev['title'], fonts['r24'], w - 32),
+              font=fonts['r24'], fill='white')
+
+
+def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):
+    if separator:
+        draw.line((x + 8, top - 4, x + w, top - 4), fill='black', width=1)
+    draw.text((x + 16, top + 4), STRINGS.get('claude_card', 'CLAUDE AI'), font=fonts['b22'], fill='black')
+    if claude.get('error'):
+        draw.text((x + 16, top + 40), STRINGS.get('claude_error', 'Claude Usage Error'),
+                  font=fonts['r22'], fill='black')
+        return
+    pct_5h = claude.get('five_hour', {}).get('utilization', 0)
+    pct_7d = claude.get('seven_day', {}).get('utilization', 0)
+    rem_5h = time_until(claude.get('five_hour', {}).get('resets_at'))
+    rem_7d = time_until(claude.get('seven_day', {}).get('resets_at'))
+    draw_usage_bar(draw, fonts, x + 16, top + 34, w - 32, pct_5h,
+                   STRINGS.get('claude_5h_short', '5h · {pct}%').format(pct=pct_5h),
+                   STRINGS.get('claude_reset', 'reset {time}').format(time=rem_5h))
+    draw_usage_bar(draw, fonts, x + 16, top + 82, w - 32, pct_7d,
+                   STRINGS.get('claude_7d_short', '7d · {pct}%').format(pct=pct_7d),
+                   STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d))
+
+
+def draw_message_slot(draw, fonts, x, w, top, h, msg):
+    bg = msg.get('bg_color', 'white')
+    tc = msg.get('text_color', 'black')
+    bc = msg.get('border_color', '')
+    draw.rectangle((x, top, x + w, top + h), fill=bg)
+    if bc:
+        draw.rectangle((x, top, x + w, top + h), outline=bc, width=4)
+    y = top + 10
+    header = msg.get('header', '').strip()
+    created_at = msg.get('created_at')
+    if header or created_at:
+        if header:
+            draw.text((x + 16, y), fit_text(header, fonts['b24'], w - 140), font=fonts['b24'], fill=tc)
+        if created_at:
+            ago = time_ago(created_at)
+            draw.text((x + w - 16 - fonts['r20'].getlength(ago), y + 4), ago, font=fonts['r20'], fill=tc)
+        draw.line((x + 16, top + 44, x + w - 16, top + 44), fill=tc, width=1)
+        y = top + 54
+    body = msg.get('body', '').strip()
+    if body:
+        for line in wrap_text(body, fonts['r22'], w - 32)[:2]:
+            draw.text((x + 16, y), line, font=fonts['r22'], fill=tc)
+            y += 28
+
+
 def render_screen(epd, fonts):
     total_width = epd.width * 2
     Himage = Image.new('RGB', (total_width, epd.height), 'white')
@@ -899,48 +1074,76 @@ def render_screen(epd, fonts):
         weather = data_store.weather.copy()
         strava = data_store.strava.copy()
         printer = data_store.printer.copy()
-        gmail_unread = data_store.gmail_unread
         calendar_events = list(data_store.calendar_events)
         tasks_items = list(data_store.tasks_items)
-        spotify = data_store.spotify.copy()
         claude = data_store.claude.copy()
         antigravity = data_store.antigravity.copy()
+        aqi = data_store.aqi
     finally:
         data_store.lock.release()
 
     dt = datetime.now()
-    months = STRINGS.get('months', ['January','February','March','April','May','June','July','August','September','October','November','December'])
+    now_utc = datetime.now(timezone.utc)
+    today_date = dt.date()
+    months_default = ['January','February','March','April','May','June','July','August','September','October','November','December']
+    months_gen = STRINGS.get('months_genitive', STRINGS.get('months', months_default))
     weekdays_list = STRINGS.get('weekdays', ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
-    col_w = total_width // 3
-
-    # --- CALENDAR (spans col1 + col2) ---
-    col1_x = 20
-    y_cal_div = 65
-
     weekdays_full = STRINGS.get('weekdays_full', ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
-    cal_line = f"{dt.year} - {months[dt.month - 1]}  ·  {dt.day} - {weekdays_full[dt.weekday()]}"
-    cal_max_w = col_w * 2 - col1_x - 20
-    cal_max_h = y_cal_div - 20
-    def fit_cal_font(text):
-        size = cal_max_h
-        while size > 8:
-            f = fonts['cal_font_cache'].get(size) or ImageFont.truetype(
-                os.path.join(FONT_DIR, 'Doto-Bold.ttf'), size)
-            fonts['cal_font_cache'][size] = f
-            bb = draw.textbbox((0, 0), text, font=f)
-            if (bb[2] - bb[0]) <= cal_max_w and (bb[3] - bb[1]) <= cal_max_h:
-                return f
-            size -= 1
-        return fonts['cal_font_cache'][8]
-    f_cal = fit_cal_font(cal_line)
-    bb_cal = draw.textbbox((0, 0), cal_line, font=f_cal)
-    cal_text_h = bb_cal[3] - bb_cal[1]
-    cal_text_y = max(0, 10 + (y_cal_div - 10 - cal_text_h) // 2 - 25)
-    draw.text((col1_x, cal_text_y), cal_line, font=f_cal, fill="black")
 
-    draw.line((col1_x, y_cal_div, col_w * 2 - 20, y_cal_div), fill="black", width=2)
+    BAND_H = 54
+    rail_w = 380
+    c3x = 916
+    c3w = total_width - c3x - 12
+    mid_x = rail_w + 24
+    mid_w = c3x - 24 - mid_x
+    MID_FLOOR = 336
+    row_h = 33
 
-    # --- COLUMN 1 (Weather) ---
+    # --- MASTHEAD (full-width black band) ---
+    draw.rectangle((0, 0, total_width, BAND_H), fill='black')
+    date_line = STRINGS.get('masthead_date', '{weekday} {day} {month}').format(
+        weekday=weekdays_full[dt.weekday()], day=dt.day, month=months_gen[dt.month - 1]).upper()
+    draw.text((20, 8), date_line, font=fonts['b34'], fill='white')
+    holiday = polish_holiday(today_date)
+    if holiday:
+        hx = max(445, 20 + fonts['b34'].getlength(date_line) + 30)
+        draw.text((hx, 12), holiday, font=fonts['b28'], fill='yellow')
+
+    # right-aligned chain: sunrise/sunset · moon · AQI
+    rx = total_width - 20
+    if aqi:
+        aqi_s = f"AQI {aqi}"
+        aw = fonts['b24'].getlength(aqi_s)
+        if aqi >= 60:
+            draw.rectangle((rx - aw - 10, 8, total_width - 12, BAND_H - 8), fill='red')
+            draw.text((rx - aw - 2, 14), aqi_s, font=fonts['b24'], fill='white')
+        else:
+            draw.text((rx - aw, 14), aqi_s, font=fonts['b24'],
+                      fill='yellow' if aqi >= 40 else 'white')
+        rx -= aw + 44
+
+    moon_names = STRINGS.get('moon_phases', [''] * 8)
+    moon_idx = moon_phase_index(dt)
+    moon_name = moon_names[moon_idx] if len(moon_names) >= 8 else ''
+    moon_w = 32 + fonts['r24'].getlength(moon_name)
+    draw_icon(draw, int(rx - moon_w), 15, f"icon_moon_phase_{moon_idx}", (24, 24), is_white=True)
+    draw.text((rx - moon_w + 32, 14), moon_name, font=fonts['r24'], fill='white')
+    rx -= moon_w + 44
+
+    daily = weather.get('daily', {})
+    d_sunrise = daily.get('sunrise', [])
+    d_sunset = daily.get('sunset', [])
+    sr_time = d_sunrise[0][11:16] if d_sunrise else '--:--'
+    ss_time = d_sunset[0][11:16] if d_sunset else '--:--'
+    sun_w = 36 + fonts['r24'].getlength(sr_time) + 38 + fonts['r24'].getlength(ss_time)
+    sx = rx - sun_w
+    draw_tri(draw, sx, 20, 13, up=True, fill='yellow')
+    draw.text((sx + 18, 14), sr_time, font=fonts['r24'], fill='white')
+    sx2 = sx + 18 + fonts['r24'].getlength(sr_time) + 20
+    draw_tri(draw, sx2, 20, 13, up=False, fill='yellow')
+    draw.text((sx2 + 18, 14), ss_time, font=fonts['r24'], fill='white')
+
+    # --- LEFT RAIL (current weather) ---
     if 'current' in weather:
         cur = weather['current']
         temp = cur.get('temperature_2m', 0)
@@ -948,285 +1151,185 @@ def render_screen(epd, fonts):
         pres = cur.get('surface_pressure', 0)
         w_code = cur.get('weather_code', 0)
         is_day = cur.get('is_day', 1)
-        uv_index = cur.get('uv_index', 0.0)
 
-        temp_rounded = math.floor(temp + 0.5)
+        ry = BAND_H + 14
+        draw_icon(draw, 20, ry + 4, get_weather_icon(w_code, is_day), (100, 100))
+        temp_s = f"{math.floor(temp + 0.5)}°"
+        draw.text((130, ry - 6), temp_s, font=fonts['b96'], fill='black')
 
-        draw_icon(draw, col1_x, y_cal_div, get_weather_icon(w_code, is_day), (90, 90))
-        draw.text((col1_x + 100, y_cal_div), f"{temp_rounded}°C", font=fonts['80'], fill="black")
-
-        uv_x, uv_y = col1_x + 310, y_cal_div + 5
-        uv_rounded = math.floor(uv_index + 0.5)
-        draw.text((uv_x, uv_y), "UV", font=fonts['28'], fill="black")
-        uv_val_str = str(uv_rounded)
-        try:
-            bbox = draw.textbbox((0, 0), uv_val_str, font=fonts['60'])
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        except AttributeError:
-            tw, th = draw.textsize(uv_val_str, font=fonts['60'])
-
-        uv_val_x, uv_val_y = uv_x + 45, y_cal_div
+        uvx = max(290, 130 + int(fonts['b96'].getlength(temp_s)) + 14)
+        uvy = ry + 6
+        draw.text((uvx, uvy), 'UV', font=fonts['r24'], fill='black')
+        uv_rounded = math.floor(cur.get('uv_index', 0.0) + 0.5)
         if uv_rounded >= 6:
-            pad = 5
-            draw.rectangle((uv_val_x - pad, uv_val_y - pad + 10, uv_val_x + tw + pad, uv_val_y + th + pad), fill="black")
-            draw.text((uv_val_x, uv_val_y), uv_val_str, font=fonts['60'], fill="white")
+            draw.rectangle((uvx - 6, uvy + 28, uvx + 58, uvy + 90), fill='red')
+            draw.text((uvx + 6, uvy + 30), str(uv_rounded), font=fonts['b52'], fill='white')
         else:
-            draw.text((uv_val_x, uv_val_y), uv_val_str, font=fonts['60'], fill="black")
+            draw.text((uvx + 2, uvy + 26), str(uv_rounded), font=fonts['b52'], fill='black')
 
-        daily = weather.get('daily', {})
-        d_times = daily.get('time', [])
+        ly = ry + 124
+        draw.text((20, ly), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum),
+                  font=fonts['r26'], fill='black')
+        draw.text((20, ly + 38), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=round(pres)),
+                  font=fonts['r26'], fill='black')
+        wind_spd = cur.get('wind_speed_10m', 0)
+        wind_deg = cur.get('wind_direction_10m', 0)
+        draw_icon(draw, 20, ly + 76, 'icon_wind', (28, 28))
+        draw.text((56, ly + 76), f"{math.floor(wind_spd + 0.5)} km/h {wind_dir_label(wind_deg)}",
+                  font=fonts['r26'], fill='black')
+
+    draw.line((rail_w + 8, BAND_H + 14, rail_w + 8, 330), fill='black', width=1)
+
+    # --- MIDDLE (calendar/printer + tasks/antigravity, flow layout) ---
+    y = BAND_H + 12
+    if ENABLE_STRAVA:
+        draw_icon(draw, mid_x, y, 'icon_strava', (40, 40))
+        draw.text((mid_x + 50, y), STRINGS.get('strava_title', 'STRAVA STATS'),
+                  font=fonts['b26'], fill='black')
+        draw.text((mid_x + 50, y + 34),
+                  STRINGS.get('strava_year_stats', '{year}: {dist} km | {prev_year}: {prev_dist} km').format(
+                      year=dt.year, dist=strava.get('distance_curr', 0),
+                      prev_year=dt.year - 1, prev_dist=strava.get('distance_prev', 0)),
+                  font=fonts['r22'], fill='black')
+        y += 70
+
+    if ENABLE_CALENDAR:
+        draw.text((mid_x, y), STRINGS.get('calendar_title', 'UPCOMING'), font=fonts['b26'], fill='black')
+        y += 42
+        if calendar_events:
+            reserve = (row_h * min(len(tasks_items), 2) + 6) if (ENABLE_TASKS and tasks_items) else 0
+            for ev in calendar_events:
+                if y + row_h > MID_FLOOR - reserve:
+                    break
+                dt_ev = ev.get('dt')
+                soon = (not ev.get('allday', True) and dt_ev is not None and
+                        0 <= (dt_ev - now_utc).total_seconds() <= 10800)
+                color = 'red' if soon else 'black'
+                sq_color = 'black' if ev['calendar'] == 'personal' else 'yellow'
+                draw.rectangle([mid_x + 2, y + 7, mid_x + 16, y + 21], fill=sq_color, outline='black')
+                delta = (ev['event_date'] - today_date).days
+                if delta == 0:
+                    day_label = STRINGS.get('calendar_today', 'today')
+                elif delta == 1:
+                    day_label = STRINGS.get('calendar_tomorrow', 'tomorrow')
+                else:
+                    day_label = f"+{delta}"
+                draw.text((mid_x + 28, y), day_label, font=fonts['r24'], fill=color)
+                if not ev.get('allday'):
+                    draw.text((mid_x + 92, y), dt_ev.astimezone().strftime('%H:%M'),
+                              font=fonts['b24'], fill=color)
+                draw.text((mid_x + 164, y), fit_text(ev['title'], fonts['r24'], mid_w - 170),
+                          font=fonts['r24'], fill=color)
+                y += row_h
+        else:
+            draw.text((mid_x, y), STRINGS.get('calendar_empty', 'No upcoming events'),
+                      font=fonts['r24'], fill='black')
+            y += row_h
+    elif ENABLE_BAMBU:
+        p_status = str(printer.get('status', 'OFFLINE')).upper()
+        draw_icon(draw, mid_x, y, 'icon_3d', (50, 50))
+        draw.text((mid_x + 60, y), STRINGS.get('printer_title', 'PRINTER: {status}').format(status=p_status),
+                  font=fonts['b26'], fill='black')
+        if p_status not in ['OFFLINE', 'UNKNOWN', 'FINISH']:
+            percent = printer.get('percentage', 0)
+            draw.rectangle((mid_x + 60, y + 40, mid_x + 390, y + 60), outline='black')
+            draw.rectangle((mid_x + 60, y + 40, mid_x + 60 + int(330 * (percent / 100)), y + 60), fill='black')
+            draw.text((mid_x + 60, y + 70),
+                      f"{percent}% | Rem: {printer.get('remaining_time', '0')}m | {printer.get('layers', '0/0')} L",
+                      font=fonts['r22'], fill='black')
+        y += 110
+
+    if ENABLE_TASKS:
+        if tasks_items:
+            y += 6
+            for task in tasks_items:
+                if y + row_h > MID_FLOOR:
+                    break
+                draw.rectangle([mid_x + 2, y + 7, mid_x + 16, y + 21], outline='black', width=2)
+                due = task.get('due', '')
+                tx = mid_x + 28
+                if due:
+                    draw.text((tx, y), due, font=fonts['b24'], fill='black')
+                    tx = mid_x + 92
+                draw.text((tx, y), fit_text(task['title'], fonts['r24'], mid_x + mid_w - tx - 6),
+                          font=fonts['r24'], fill='black')
+                y += row_h
+    elif ENABLE_ANTIGRAVITY:
+        y += 6
+        if antigravity.get('error'):
+            draw.text((mid_x, y), STRINGS.get('error_loading_data', 'Error loading data'),
+                      font=fonts['r22'], fill='black')
+        else:
+            models = antigravity.get('models', [])
+            opus = next((m for m in models if m.get('modelId') == 'claude-opus-4-6-thinking'), None)
+            gemini = next((m for m in models if m.get('modelId') == 'gemini-3-pro-high'), None)
+            for m_data in (opus, gemini):
+                if m_data and y + 48 <= MID_FLOOR:
+                    label = "Opus 4.6" if m_data.get('modelId') == 'claude-opus-4-6-thinking' else "Gemini 3Pro"
+                    pct = m_data.get('usedPercentage', 0)
+                    draw_usage_bar(draw, fonts, mid_x, y, mid_w - 20, pct,
+                                   f"{label} · {pct}%", time_until(m_data.get('resetDate')))
+                    y += 48
+
+    # --- FORECAST STRIP (bottom, rail + middle width) ---
+    d_times = daily.get('time', [])
+    if d_times:
         d_tmax = daily.get('temperature_2m_max', [])
         d_tmin = daily.get('temperature_2m_min', [])
         d_codes = daily.get('weather_code', [])
-
-        d_sunrise = daily.get('sunrise', [])
-        d_sunset = daily.get('sunset', [])
-        sr_time = d_sunrise[0][11:16] if d_sunrise else '--:--'
-        ss_time = d_sunset[0][11:16] if d_sunset else '--:--'
-        sr_ss_str = STRINGS.get('sunrise_sunset', '↑ {sr}   ↓ {ss}').format(sr=sr_time, ss=ss_time)
-
-        moon_names = STRINGS.get('moon_phases', [''] * 8)
-        moon_idx = moon_phase_index(datetime.now())
-        moon_name = moon_names[moon_idx] if len(moon_names) >= 8 else ''
-
-        x_left = col1_x + 100
-        x_right = col1_x + 255
-
-        # Line 1: humidity (left)  |  sunrise/sunset (right)
-        draw.text((x_left, y_cal_div + 90), STRINGS.get('humidity', 'Humidity: {hum}%').format(hum=hum), font=fonts['20'], fill="black")
-        draw.text((x_right, y_cal_div + 90), sr_ss_str, font=fonts['20'], fill="black")
-
-        # Line 2: pressure (left)  |  moon phase icon + name (right)
-        draw.text((x_left, y_cal_div + 115), STRINGS.get('pressure', 'Press: {pres} hPa').format(pres=pres), font=fonts['20'], fill="black")
-        draw_icon(draw, x_right, y_cal_div + 113, f"icon_moon_phase_{moon_idx}", (20, 20))
-        draw.text((x_right + 24, y_cal_div + 115), moon_name, font=fonts['20'], fill="black")
-
-        draw.line((col1_x, 210, col_w - 20, 210), fill="black", width=2)
-
+        d_rain = daily.get('precipitation_probability_max', [])
+        sy = 344
+        draw.line((20, sy, c3x - 24, sy), fill='black', width=1)
         n_days = min(FORECAST_DAYS, len(d_times))
-        slot_w = (col_w - 40) // max(n_days, 1)
-        icon_sz = min(50, slot_w - 10)
-        f_y = 220
+        strip_w = c3x - 24 - 20
+        cell_w = strip_w // max(n_days, 1)
+        compact = cell_w < 165
+        icon_sz = 50 if compact else 66
+        f_day = fonts['b22'] if compact else fonts['b26']
+        f_hi = fonts['b28'] if compact else fonts['b36']
+        f_lo = fonts['r22'] if compact else fonts['r26']
         for i in range(n_days):
-            off_x = col1_x + (i * slot_w)
+            ox = 20 + i * cell_w
             try:
                 day_dt = datetime.strptime(d_times[i], "%Y-%m-%d")
                 day_label = weekdays_list[day_dt.weekday()]
             except Exception:
                 day_label = d_times[i][-5:] if d_times[i] else ''
-            draw.text((off_x + 4, f_y), day_label, font=fonts['20'], fill="black")
-            draw_icon(draw, off_x + 4, f_y + 24, get_weather_icon(d_codes[i] if i < len(d_codes) else 0, 1), (icon_sz, icon_sz))
+            draw.text((ox + 14, sy + 8), day_label, font=f_day, fill='red' if i == 0 else 'black')
+            rain = int(d_rain[i]) if i < len(d_rain) and d_rain[i] is not None else 0
+            if rain >= 30:
+                rc = 'red' if rain >= 60 else 'black'
+                rain_s = f"{rain}%"
+                px = ox + cell_w - 14 - fonts['b22'].getlength(rain_s)
+                draw_drop(draw, int(px - 18), sy + 14, 13, fill=rc)
+                draw.text((px, sy + 10), rain_s, font=fonts['b22'], fill=rc)
+            draw_icon(draw, ox + 14, sy + 46,
+                      get_weather_icon(d_codes[i] if i < len(d_codes) else 0, 1), (icon_sz, icon_sz))
+            tx = ox + 14 + icon_sz + 12
             tmax = math.floor(d_tmax[i] + 0.5) if i < len(d_tmax) else 0
             tmin = math.floor(d_tmin[i] + 0.5) if i < len(d_tmin) else 0
-            draw.text((off_x + 4, f_y + 24 + icon_sz + 2), f"{tmax}°", font=fonts['20'], fill="black")
-            draw.text((off_x + 4, f_y + 24 + icon_sz + 20), f"{tmin}°", font=fonts['20'], fill="black")
+            draw.text((tx, sy + 44), f"{tmax}°", font=f_hi, fill='black')
+            draw.text((tx, sy + 88), f"{tmin}°", font=f_lo, fill='black')
 
-        if ENABLE_CLAUDE:
-            cu_y = f_y + 24 + icon_sz + 62  # extra gap after forecast tmin row
-            draw.line((col1_x, cu_y - 10, col_w - 20, cu_y - 10), fill="black", width=1)
-            draw.text((col1_x, cu_y), STRINGS.get('claude_title', 'CLAUDE AI USAGE'), font=fonts['20'], fill="black")
-            if claude.get('error'):
-                draw.text((col1_x, cu_y + 24), STRINGS.get('claude_error', 'Claude Usage Error'), font=fonts['20'], fill="black")
-            else:
-                pct_5h = claude.get('five_hour', {}).get('utilization', 0)
-                resets_5h = claude.get('five_hour', {}).get('resets_at')
-                rem_5h = time_until(resets_5h)
-                pct_7d = claude.get('seven_day', {}).get('utilization', 0)
-                resets_7d = claude.get('seven_day', {}).get('resets_at')
-                rem_7d = time_until(resets_7d)
-                bar_w = col_w - 40
-                bx = col1_x
-                draw.text((col1_x, cu_y + 24), STRINGS.get('claude_5h', '5-Hour Limit: {pct}% (Resets in {time})').format(pct=pct_5h, time=rem_5h), font=fonts['20'], fill="black")
-                draw.rectangle((bx, cu_y + 50, bx + bar_w, cu_y + 60), outline="black", width=2)
-                fill_w = int((bar_w - 4) * min(pct_5h / 100.0, 1.0))
-                if fill_w > 0:
-                    draw.rectangle((bx + 2, cu_y + 52, bx + 2 + fill_w, cu_y + 58), fill="black")
-                draw.text((col1_x, cu_y + 66), STRINGS.get('claude_7d', '7-Day Limit: {pct}% (Resets in {time})').format(pct=pct_7d, time=rem_7d), font=fonts['20'], fill="black")
-                draw.rectangle((bx, cu_y + 92, bx + bar_w, cu_y + 102), outline="black", width=2)
-                fill_w = int((bar_w - 4) * min(pct_7d / 100.0, 1.0))
-                if fill_w > 0:
-                    draw.rectangle((bx + 2, cu_y + 94, bx + 2 + fill_w, cu_y + 100), fill="black")
-
-    draw.line((col_w, y_cal_div, col_w, 470), fill="black", width=2)
-
-    # --- COLUMN 2 (Widgets) ---
-    col2_x = col_w + 20
-
-    if ENABLE_STRAVA:
-        y1 = y_cal_div + 15
-        draw_icon(draw, col2_x, y1, "icon_strava", (60, 60))
-        draw.text((col2_x + 70, y1), STRINGS.get('strava_title', 'STRAVA STATS'), font=fonts['28'], fill="black")
-
-        draw.text((col2_x + 70, y1 + 35),
-                  STRINGS.get('strava_year_stats', '{year}: {dist} km | {prev_year}: {prev_dist} km').format(
-                      year=dt.year, dist=strava.get('distance_curr', 0),
-                      prev_year=dt.year - 1, prev_dist=strava.get('distance_prev', 0)),
-                  font=fonts['20'], fill="black")
-        draw.text((col2_x + 70, y1 + 60),
-                  STRINGS.get('strava_total', 'Total: {dist} km | {rides} acts').format(
-                      dist=strava.get('total_distance', 0), rides=strava.get('rides', 0)),
-                  font=fonts['20'], fill="black")
-
-        draw_icon(draw, col2_x + 70, y1 + 85, "icon_bike", (30, 30))
-        draw.text((col2_x + 105, y1 + 90), f"{strava.get('bike_total', 0)} km", font=fonts['20'], fill="black")
-
-        draw_icon(draw, col2_x + 220, y1 + 85, "icon_hike", (30, 30))
-        draw.text((col2_x + 255, y1 + 90), f"{strava.get('hike_total', 0)} km", font=fonts['20'], fill="black")
-
-        draw.line((col2_x, 165, col_w * 2 - 20, 165), fill="black", width=2)
-        y2 = 185
-    else:
-        y2 = y_cal_div + 8
-
-    if ENABLE_CALENDAR:
-        draw.text((col2_x, y2), STRINGS.get('calendar_title', 'NADCHODZĄCE'), font=fonts['cal28'], fill="black")
-        now_utc = datetime.now(timezone.utc)
-        today_date = datetime.now().date()
-        row_h = 27
-        # Fixed column positions: [sq] [day_label] [HH:MM] [title]
-        x_day   = col2_x + 18   # day label ("dziś", "jutro", "+3")
-        x_time  = col2_x + 68   # HH:MM (fixed, blank for all-day)
-        x_title = col2_x + 118  # event title
-        ey = y2 + 35
-        if calendar_events:
-            for ev in calendar_events:
-                if ey + row_h > 318:
-                    break
-                dt_ev = ev.get('dt')
-                soon = (not ev.get('allday', True) and dt_ev is not None and
-                        0 <= (dt_ev - now_utc).total_seconds() <= 10800)
-                text_color = "red" if soon else "black"
-                sq_color = "black" if ev['calendar'] == 'personal' else "yellow"
-                draw.rectangle([col2_x + 2, ey + 5, col2_x + 13, ey + 16], fill=sq_color, outline="black")
-                delta = (ev['event_date'] - today_date).days
-                if delta == 0:
-                    day_label = STRINGS.get('calendar_today', 'dziś')
-                elif delta == 1:
-                    day_label = STRINGS.get('calendar_tomorrow', 'jutro')
-                else:
-                    day_label = f"+{delta}"
-                time_part = '' if ev.get('allday') else dt_ev.astimezone().strftime('%H:%M')
-                draw.text((x_day, ey), day_label, font=fonts['cal20'], fill=text_color)
-                if time_part:
-                    draw.text((x_time, ey), time_part, font=fonts['cal20'], fill=text_color)
-                title = ev['title']
-                if len(title) > 28:
-                    title = title[:27] + '…'
-                draw.text((x_title, ey), title, font=fonts['cal20'], fill=text_color)
-                if soon:
-                    draw.text((x_day + 1, ey), day_label, font=fonts['cal20'], fill=text_color)
-                    if time_part:
-                        draw.text((x_time + 1, ey), time_part, font=fonts['cal20'], fill=text_color)
-                    draw.text((x_title + 1, ey), title, font=fonts['cal20'], fill=text_color)
-                ey += row_h
+    # --- COLUMN 3 (messages preempt fallback cards top-down) ---
+    draw.line((c3x - 12, BAND_H + 10, c3x - 12, 470), fill='black', width=1)
+    SLOT_H, SLOT_GAP = 130, 6
+    messages = read_messages()[:3]
+    cards = []
+    if ENABLE_CALENDAR and calendar_events:
+        cards.append(('next', calendar_events[0]))
+    if ENABLE_CLAUDE:
+        cards.append(('claude', claude))
+    cards = cards[:max(0, 3 - len(messages))]
+    slots = cards + [('msg', m) for m in messages]
+    for i, (kind, payload) in enumerate(slots[:3]):
+        top = BAND_H + 10 + i * (SLOT_H + SLOT_GAP)
+        if kind == 'next':
+            draw_next_event_card(draw, fonts, c3x, c3w, top, SLOT_H, payload, now_utc, today_date)
+        elif kind == 'claude':
+            draw_claude_card(draw, fonts, c3x, c3w, top, SLOT_H, payload, separator=(i > 0))
         else:
-            draw.text((col2_x, ey), STRINGS.get('calendar_empty', 'Brak nadchodzących wydarzeń'), font=fonts['cal20'], fill="black")
-    elif ENABLE_BAMBU:
-        p_status = str(printer.get('status', 'OFFLINE')).upper()
-        draw_icon(draw, col2_x, y2, "icon_3d", (60, 60))
-        draw.text((col2_x + 70, y2), STRINGS.get('printer_title', 'PRINTER: {status}').format(status=p_status), font=fonts['28'], fill="black")
-        if p_status not in ["OFFLINE", "UNKNOWN", "FINISH"]:
-            percent = printer.get('percentage', 0)
-            draw.rectangle((col2_x + 70, y2 + 40, col2_x + 400, y2 + 60), outline="black")
-            draw.rectangle((col2_x + 70, y2 + 40, col2_x + 70 + int(330 * (percent / 100)), y2 + 60), fill="black")
-            draw.text((col2_x + 70, y2 + 70),
-                      f"{percent}% | Rem: {printer.get('remaining_time', '0')}m | {printer.get('layers', '0/0')} L",
-                      font=fonts['20'], fill="black")
-
-    draw.line((col2_x, 320, col_w * 2 - 20, 320), fill="black", width=2)
-
-    y3 = 330
-    if ENABLE_TASKS:
-        draw.text((col2_x, y3), STRINGS.get('tasks_title', 'ZADANIA'), font=fonts['cal28'], fill="black")
-        row_h = 27
-        ty = y3 + 35
-        if tasks_items:
-            for task in tasks_items:
-                if ty + row_h > 470:
-                    break
-                due = task.get('due', '')
-                title = task['title']
-                if due:
-                    draw.text((col2_x + 2, ty), '·', font=fonts['20'], fill="black")
-                    draw.text((col2_x + 18, ty), due, font=fonts['cal20'], fill="black")
-                    max_chars = 45
-                    if len(title) > max_chars:
-                        title = title[:max_chars - 1] + '…'
-                    draw.text((col2_x + 68, ty), title, font=fonts['cal20'], fill="black")
-                else:
-                    draw.text((col2_x + 2, ty), '·', font=fonts['20'], fill="black")
-                    max_chars = 52
-                    if len(title) > max_chars:
-                        title = title[:max_chars - 1] + '…'
-                    draw.text((col2_x + 18, ty), title, font=fonts['cal20'], fill="black")
-                ty += row_h
-        else:
-            draw.text((col2_x, ty), STRINGS.get('tasks_empty', 'Brak zadań'), font=fonts['cal20'], fill="black")
-    elif ENABLE_ANTIGRAVITY:
-        draw_icon(draw, col2_x, y3, "icon_cpu", (50, 50))
-        draw.text((col2_x + 60, y3), STRINGS.get('antigravity_title', 'ANTIGRAVITY USAGE'), font=fonts['28'], fill="black")
-        if antigravity.get('error'):
-            draw.text((col2_x + 60, y3 + 35), STRINGS.get('error_loading_data', 'Error loading data'), font=fonts['20'], fill="black")
-        else:
-            models = antigravity.get('models', [])
-            opus = next((m for m in models if m.get('modelId') == 'claude-opus-4-6-thinking'), None)
-            gemini = next((m for m in models if m.get('modelId') == 'gemini-3-pro-high'), None)
-            y_off = y3 + 35
-            for m_data in (opus, gemini):
-                if m_data:
-                    label = "Opus 4.6" if m_data.get('modelId') == 'claude-opus-4-6-thinking' else "Gemini 3Pro"
-                    pct = m_data.get('usedPercentage', 0)
-                    rem_time = time_until(m_data.get('resetDate'))
-                    draw.text((col2_x + 60, y_off), STRINGS.get('antigravity_model', '{label} {pct}% | In {time}').format(label=label, pct=pct, time=rem_time), font=fonts['20'], fill="black")
-                    bx, bw, bh = col2_x + 60, 330, 15
-                    draw.rectangle((bx, y_off + 25, bx + bw, y_off + 25 + bh), outline="black", width=2)
-                    fill_w = int((bw - 4) * min(pct / 100.0, 1.0))
-                    if fill_w > 0: draw.rectangle((bx + 2, y_off + 27, bx + 2 + fill_w, y_off + 25 + bh - 2), fill="black")
-                    y_off += 50
-
-    draw.line((col_w * 2, 10, col_w * 2, 470), fill="black", width=2)
-
-    # --- COLUMN 3 (Custom Messages, up to 3 slots) ---
-    col3_x = col_w * 2 + 30
-    col3_w = total_width - col3_x - 10
-    SLOT_H = 150
-    SLOT_GAP = 5
-
-    messages = read_messages()
-    for i, msg in enumerate(messages[:3]):
-        slot_top = 10 + i * (SLOT_H + SLOT_GAP)
-        slot_bot = slot_top + SLOT_H
-
-        bg  = msg.get('bg_color', 'white')
-        tc  = msg.get('text_color', 'black')
-        bc  = msg.get('border_color', '')
-        border = 4 if bc else 0
-
-        draw.rectangle((col3_x, slot_top, col3_x + col3_w, slot_bot), fill=bg)
-        if bc:
-            draw.rectangle((col3_x, slot_top, col3_x + col3_w, slot_bot), outline=bc, width=border)
-
-        pad = 14
-        y = slot_top + 6
-        header = msg.get('header', '').strip()
-        created_at = msg.get('created_at')
-
-        if header or created_at:
-            if header:
-                draw.text((col3_x + pad, y), header, font=fonts['24'], fill=tc)
-            if created_at:
-                ago = time_ago(created_at)
-                ago_w = fonts['20'].getlength(ago)
-                draw.text((col3_x + col3_w - pad - ago_w, y + 4), ago, font=fonts['20'], fill=tc)
-            y += 30
-            draw.line((col3_x + pad, y, col3_x + col3_w - pad, y), fill=tc, width=1)
-            y += 6
-
-        body = msg.get('body', '').strip()
-        if body:
-            for line in wrap_text(body, fonts['20'], col3_w - pad * 2)[:2]:
-                draw.text((col3_x + pad, y), line, font=fonts['20'], fill=tc)
-                y += 24
+            draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, payload)
 
     return Himage
 
@@ -1259,18 +1362,22 @@ def main():
         def load_font(name, size):
             return ImageFont.truetype(os.path.join(FONT_DIR, name), size)
 
+        AT_R = 'AtkinsonHyperlegible-Regular.ttf'
+        AT_B = 'AtkinsonHyperlegible-Bold.ttf'
         fonts = {
-            'cal_font_cache': {},
-            '20': load_font('EncodeSansCondensed-Regular.ttf', 20),
-            '24': load_font('EncodeSansCondensed-Regular.ttf', 24),
-            '28': load_font('EncodeSansCondensed-Regular.ttf', 28),
-            '32': load_font('EncodeSansCondensed-Regular.ttf', 32),
-            '35': load_font('EncodeSansCondensed-Regular.ttf', 35),
-            '40': load_font('EncodeSansCondensed-Regular.ttf', 40),
-            '60': load_font('EncodeSansCondensed-Regular.ttf', 60),
-            '80': load_font('EncodeSansCondensed-Regular.ttf', 80),
-            'cal20': load_font('EncodeSansCondensed-Regular.ttf', 20),
-            'cal28': load_font('EncodeSansCondensed-Bold.ttf', 28),
+            'r20': load_font(AT_R, 20),
+            'r22': load_font(AT_R, 22),
+            'r24': load_font(AT_R, 24),
+            'r26': load_font(AT_R, 26),
+            'b22': load_font(AT_B, 22),
+            'b24': load_font(AT_B, 24),
+            'b26': load_font(AT_B, 26),
+            'b28': load_font(AT_B, 28),
+            'b34': load_font(AT_B, 34),
+            'b36': load_font(AT_B, 36),
+            'b48': load_font(AT_B, 48),
+            'b52': load_font(AT_B, 52),
+            'b96': load_font(AT_B, 96),
         }
 
         refresh_counter = 0

@@ -49,6 +49,7 @@ def fonts_B():
         'uv':         F('IBMPlexSans-Bold.ttf', 36),        # UV value
         'small':      F('IBMPlexSans-Regular.ttf', 20),     # timestamps, bar subs
         'small_knock': F('IBMPlexSans-Medium.ttf', 20),     # small on black (bumped)
+        'tiny':       F('IBMPlexSans-Regular.ttf', 14),
         'tracking':   2,
     }
 
@@ -75,6 +76,7 @@ def fonts_C():
         'uv':         F('ArchivoBlack-Regular.ttf', 36),
         'small':      F('Archivo-Regular.ttf', 20),
         'small_knock': F('Archivo-Medium.ttf', 20),
+        'tiny':       F('ArchivoNarrow-Bold.ttf', 14),
         'tracking':   2,
     }
 
@@ -261,23 +263,39 @@ def render(fs):
         d.text((DAY_X, y + 1), task, font=fs['body22'], fill='black')
         y += row_h
 
-    def usage_bar(x, yb, w, pct, label, sub):
-        d.text((x, yb), label, font=fs['small'], fill='black')
-        d.text((x + w - fs['small'].getlength(sub), yb), sub, font=fs['small'], fill='black')
-        bar_y = yb + 26
-        d.rectangle((x, bar_y, x + w, bar_y + 11), outline='black', width=2)
-        fill_w = int((w - 4) * min(pct / 100.0, 1.0))
-        if fill_w > 0:
-            d.rectangle((x + 2, bar_y + 2, x + 2 + fill_w, bar_y + 9),
-                        fill='red' if pct >= 80 else 'black')
+    def usage_bar_inline(x, y, w, pct, label, sub):
+        lw = int(fs['small'].getlength(label))
+        sw = int(fs['small'].getlength(sub))
+        d.text((x, y), label, font=fs['small'], fill='black')
+        d.text((x + w - sw, y), sub, font=fs['small'], fill='black')
+        bar_x = x + lw + 8
+        bar_end = x + w - sw - 8
+        bar_w = max(0, bar_end - bar_x)
+        if bar_w > 0:
+            by = y + 4
+            d.rectangle((bar_x, by, bar_x + bar_w, by + 12), outline='black', width=2)
+            fill_w = int((bar_w - 4) * min(pct / 100.0, 1.0))
+            if fill_w > 0:
+                d.rectangle((bar_x + 2, by + 2, bar_x + 2 + fill_w, by + 10),
+                             fill='red' if pct >= 80 else 'black')
 
     # --- COL3: 3 messages + compact claude ---
     c3_top = BAND_H + 10
     COMPACT_H = 88
-    # compact claude strip
+    # compact claude strip — vertical label + 2 inline bars
     d.line((c3x + 8, c3_top - 4, c3x + c3w, c3_top - 4), fill='black', width=1)
-    usage_bar(c3x + 16, c3_top + 6, c3w - 32, 42, '5h · 42%', 'reset in 1 hr')
-    usage_bar(c3x + 16, c3_top + 50, c3w - 32, 81, '7d · 81%', 'reset in 3 days')
+    vfont = fs['tiny']
+    lbl = 'CLAUDE AI'
+    bbox = vfont.getbbox(lbl)
+    lw_v, lh_v = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    lbl_img = Image.new('RGB', (lw_v + 4, lh_v + 4), 'white')
+    ImageDraw.Draw(lbl_img).text((2, 2), lbl, font=vfont, fill='black')
+    lbl_img = lbl_img.rotate(90, expand=True)
+    img.paste(lbl_img, (c3x + 4, c3_top + (COMPACT_H - lbl_img.height) // 2))
+    bx = c3x + lbl_img.width + 12
+    bw = c3w - lbl_img.width - 20
+    usage_bar_inline(bx, c3_top + 16, bw, 42, '5h · 42%', 'reset in 1 hr')
+    usage_bar_inline(bx, c3_top + 52, bw, 81, '7d · 81%', 'reset in 3 days')
     c3_top += COMPACT_H + 6
 
     SLOT_H, SLOT_GAP = 104, 5

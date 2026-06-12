@@ -240,8 +240,6 @@ def render(fs):
 
     # --- MIDDLE: calendar + tasks ---
     y = BAND_H + 12
-    draw_tracked(d, (mid_x, y), 'UPCOMING', fs['label'], 'black', trk)
-    y += 42
 
     cal_rows = [
         ('yellow', 'TODAY', '15:00', 'Stand-up meeting',    'red'),    # ongoing

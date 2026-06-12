@@ -929,9 +929,6 @@ def render_screen(epd, fonts):
     # --- MIDDLE (calendar + tasks, flow layout) ---
     y = BAND_H + 12
     if ENABLE_CALENDAR:
-        draw_tracked(draw, (mid_x, y), STRINGS.get('calendar_title', 'UPCOMING'),
-                     fonts['label'], 'black')
-        y += 42
         if calendar_events:
             reserve = (row_h * min(len(tasks_items), 2) + 6) if (ENABLE_TASKS and tasks_items) else 0
             for ev in calendar_events:

@@ -778,14 +778,14 @@ def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):
                    STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d))
 
 
-def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub, label_col_w=None):
-    if label_col_w is None:
-        label_col_w = int(fonts['small'].getlength(label))
-    sw = int(fonts['small'].getlength(sub))
+def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub, label_col_w=None, sub_col_w=None):
+    lw = label_col_w if label_col_w is not None else int(fonts['small'].getlength(label))
+    sw_actual = int(fonts['small'].getlength(sub))
+    sw_col = sub_col_w if sub_col_w is not None else sw_actual
     draw.text((x, y), label, font=fonts['small'], fill='black')
-    draw.text((x + w - sw, y), sub, font=fonts['small'], fill='black')
-    bar_x = x + label_col_w + 8
-    bar_end = x + w - sw - 8
+    draw.text((x + w - sw_actual, y), sub, font=fonts['small'], fill='black')
+    bar_x = x + lw + 8
+    bar_end = x + w - sw_col - 8
     bar_w = max(0, bar_end - bar_x)
     if bar_w > 0:
         by = y + 4
@@ -796,12 +796,12 @@ def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub, label_col_w=Non
                            fill='red' if pct >= 80 else 'black')
 
 
-COMPACT_H = 90
+COMPACT_H = 52
 
 def draw_claude_compact(draw, fonts, x, w, top, claude):
     draw.line((x + 8, top - 4, x + w, top - 4), fill='black', width=1)
     vfont = fonts['tiny']
-    letters = 'CLAUDE'
+    letters = 'CLD'
     sample_bb = vfont.getbbox('M')
     cell_h = sample_bb[3] - sample_bb[1] + 1
     max_lw = max(vfont.getbbox(c)[2] - vfont.getbbox(c)[0] for c in letters)
@@ -813,7 +813,7 @@ def draw_claude_compact(draw, fonts, x, w, top, claude):
     bx = x + max_lw + 12
     bw = w - max_lw - 20
     if claude.get('error'):
-        draw.text((bx, top + 20), STRINGS.get('claude_error', 'Usage Error'),
+        draw.text((bx, top + 16), STRINGS.get('claude_error', 'Usage Error'),
                   font=fonts['small'], fill='black')
         return
     pct_5h = claude.get('five_hour', {}).get('utilization', 0)
@@ -822,13 +822,14 @@ def draw_claude_compact(draw, fonts, x, w, top, claude):
     rem_7d = time_until(claude.get('seven_day', {}).get('resets_at'))
     lbl_5h = STRINGS.get('claude_5h_short', '5h · {pct}%').format(pct=pct_5h)
     lbl_7d = STRINGS.get('claude_7d_short', '7d · {pct}%').format(pct=pct_7d)
+    sub_5h = STRINGS.get('claude_reset', 'reset {time}').format(time=rem_5h)
+    sub_7d = STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d)
     fixed_lw = max(int(fonts['small'].getlength(lbl_5h)), int(fonts['small'].getlength(lbl_7d)))
-    draw_usage_bar_inline(draw, fonts, bx, top + 8, bw, pct_5h, lbl_5h,
-                          STRINGS.get('claude_reset', 'reset {time}').format(time=rem_5h),
-                          label_col_w=fixed_lw)
-    draw_usage_bar_inline(draw, fonts, bx, top + 38, bw, pct_7d, lbl_7d,
-                          STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d),
-                          label_col_w=fixed_lw)
+    fixed_sw = max(int(fonts['small'].getlength(sub_5h)), int(fonts['small'].getlength(sub_7d)))
+    draw_usage_bar_inline(draw, fonts, bx, top + 8, bw, pct_5h, lbl_5h, sub_5h,
+                          label_col_w=fixed_lw, sub_col_w=fixed_sw)
+    draw_usage_bar_inline(draw, fonts, bx, top + 30, bw, pct_7d, lbl_7d, sub_7d,
+                          label_col_w=fixed_lw, sub_col_w=fixed_sw)
 
 
 def draw_message_slot(draw, fonts, x, w, top, h, msg, max_body_lines=2):
@@ -1074,10 +1075,10 @@ def render_screen(epd, fonts):
         # compact claude strip (2 bars, no title) above 3 shrunk message slots
         draw_claude_compact(draw, fonts, c3x, c3w, c3_top, claude)
         c3_top += COMPACT_H + 6
-        SLOT_H, SLOT_GAP = 103, 5
+        SLOT_H, SLOT_GAP = 116, 5
         for i, msg in enumerate(messages):
             top = c3_top + i * (SLOT_H + SLOT_GAP)
-            draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, msg, max_body_lines=1)
+            draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, msg, max_body_lines=2)
     else:
         SLOT_H, SLOT_GAP = 130, 6
         cards = []

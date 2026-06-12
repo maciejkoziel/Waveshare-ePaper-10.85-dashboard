@@ -41,8 +41,10 @@ try:
     with open(os.path.join(BASE_DIR, 'settings_local.toml'), 'rb') as _f:
         _cfg = tomllib.load(_f)
     PORT = _cfg.get('message_server', {}).get('port', 5000)
+    AUTO_CLEAR_HOURS = _cfg.get('message_server', {}).get('auto_clear_hours', 0)
 except FileNotFoundError:
     PORT = 5000
+    AUTO_CLEAR_HOURS = 0
 
 VALID_COLORS = {'black', 'white', 'red', 'yellow'}
 
@@ -63,6 +65,9 @@ def _read_messages():
             data = json.load(f)
         if isinstance(data, dict):
             data = [data]
+        if AUTO_CLEAR_HOURS > 0:
+            now = time.time()
+            data = [m for m in data if now - m.get('created_at', 0) <= AUTO_CLEAR_HOURS * 3600]
         return data
     except (FileNotFoundError, json.JSONDecodeError):
         return []

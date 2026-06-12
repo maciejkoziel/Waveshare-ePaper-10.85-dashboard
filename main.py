@@ -57,6 +57,7 @@ try:
     FORECAST_DAYS = _cfg.get('weather', {}).get('forecast_days', 5)
     _DEFAULT_CALENDARS = [{'match': 'primary', 'color': 'white'}, {'match': 'family', 'color': 'yellow'}]
     CALENDAR_CONFIG = _cfg.get('calendar', {}).get('calendars', _DEFAULT_CALENDARS)
+    MESSAGE_AUTO_CLEAR_HOURS = _cfg.get('message_server', {}).get('auto_clear_hours', 0)
 except FileNotFoundError:
     ENABLE_CALENDAR = False
     ENABLE_TASKS = False
@@ -66,6 +67,7 @@ except FileNotFoundError:
     LANGUAGE = 'en'
     FORECAST_DAYS = 5
     CALENDAR_CONFIG = [{'match': 'primary', 'color': 'white'}, {'match': 'family', 'color': 'yellow'}]
+    MESSAGE_AUTO_CLEAR_HOURS = 0
 
 # --- LANGUAGE STRINGS ---
 LANG_DIR = os.path.join(BASE_DIR, 'lang')
@@ -505,7 +507,14 @@ def read_messages():
         if isinstance(data, dict):
             data = [data]
         now = time.time()
-        return [m for m in data if not (m.get('ttl', 0) > 0 and now - m.get('created_at', 0) > m['ttl'])]
+        def _expired(m):
+            age = now - m.get('created_at', 0)
+            if m.get('ttl', 0) > 0 and age > m['ttl']:
+                return True
+            if MESSAGE_AUTO_CLEAR_HOURS > 0 and age > MESSAGE_AUTO_CLEAR_HOURS * 3600:
+                return True
+            return False
+        return [m for m in data if not _expired(m)]
     except (FileNotFoundError, json.JSONDecodeError):
         return []
 

@@ -783,7 +783,7 @@ def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub, label_col_w=Non
     sw_actual = int(fonts['small'].getlength(sub))
     sw_col = sub_col_w if sub_col_w is not None else sw_actual
     draw.text((x, y), label, font=fonts['small'], fill='black')
-    draw.text((x + w - sw_actual, y), sub, font=fonts['small'], fill='black')
+    draw.text((x + w - sw_col, y), sub, font=fonts['small'], fill='black')
     bar_x = x + lw + 8
     bar_end = x + w - sw_col - 8
     bar_w = max(0, bar_end - bar_x)

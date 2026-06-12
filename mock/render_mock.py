@@ -268,7 +268,7 @@ def render(fs):
         sw_actual = int(fs['small'].getlength(sub))
         sw_col = sub_col_w if sub_col_w is not None else sw_actual
         d.text((x, y), label, font=fs['small'], fill='black')
-        d.text((x + w - sw_actual, y), sub, font=fs['small'], fill='black')
+        d.text((x + w - sw_col, y), sub, font=fs['small'], fill='black')
         bar_x = x + lw + 8
         bar_end = x + w - sw_col - 8
         bar_w = max(0, bar_end - bar_x)

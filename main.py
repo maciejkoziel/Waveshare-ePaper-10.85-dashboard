@@ -796,20 +796,22 @@ def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub, label_col_w=Non
                            fill='red' if pct >= 80 else 'black')
 
 
-COMPACT_H = 60
+COMPACT_H = 90
 
-def draw_claude_compact(draw, image, fonts, x, w, top, claude):
+def draw_claude_compact(draw, fonts, x, w, top, claude):
     draw.line((x + 8, top - 4, x + w, top - 4), fill='black', width=1)
-    label = STRINGS.get('claude_card', 'CLAUDE AI')
     vfont = fonts['tiny']
-    bbox = vfont.getbbox(label)
-    lw, lh = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    lbl_img = Image.new('RGB', (lw + 4, lh + 4), 'white')
-    ImageDraw.Draw(lbl_img).text((2, 2), label, font=vfont, fill='black')
-    lbl_img = lbl_img.rotate(90, expand=True)
-    image.paste(lbl_img, (x + 4, top + (COMPACT_H - lbl_img.height) // 2))
-    bx = x + lbl_img.width + 12
-    bw = w - lbl_img.width - 20
+    letters = 'CLAUDE'
+    sample_bb = vfont.getbbox('M')
+    cell_h = sample_bb[3] - sample_bb[1] + 1
+    max_lw = max(vfont.getbbox(c)[2] - vfont.getbbox(c)[0] for c in letters)
+    total_h = len(letters) * cell_h
+    ly = top + (COMPACT_H - total_h) // 2
+    for i, ch in enumerate(letters):
+        cw = vfont.getbbox(ch)[2] - vfont.getbbox(ch)[0]
+        draw.text((x + 4 + (max_lw - cw) // 2, ly + i * cell_h), ch, font=vfont, fill='black')
+    bx = x + max_lw + 12
+    bw = w - max_lw - 20
     if claude.get('error'):
         draw.text((bx, top + 20), STRINGS.get('claude_error', 'Usage Error'),
                   font=fonts['small'], fill='black')
@@ -824,7 +826,7 @@ def draw_claude_compact(draw, image, fonts, x, w, top, claude):
     draw_usage_bar_inline(draw, fonts, bx, top + 8, bw, pct_5h, lbl_5h,
                           STRINGS.get('claude_reset', 'reset {time}').format(time=rem_5h),
                           label_col_w=fixed_lw)
-    draw_usage_bar_inline(draw, fonts, bx, top + 34, bw, pct_7d, lbl_7d,
+    draw_usage_bar_inline(draw, fonts, bx, top + 38, bw, pct_7d, lbl_7d,
                           STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d),
                           label_col_w=fixed_lw)
 
@@ -1070,9 +1072,9 @@ def render_screen(epd, fonts):
 
     if ENABLE_CLAUDE and len(messages) == 3:
         # compact claude strip (2 bars, no title) above 3 shrunk message slots
-        draw_claude_compact(draw, Himage, fonts, c3x, c3w, c3_top, claude)
+        draw_claude_compact(draw, fonts, c3x, c3w, c3_top, claude)
         c3_top += COMPACT_H + 6
-        SLOT_H, SLOT_GAP = 113, 5
+        SLOT_H, SLOT_GAP = 103, 5
         for i, msg in enumerate(messages):
             top = c3_top + i * (SLOT_H + SLOT_GAP)
             draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, msg, max_body_lines=1)
@@ -1146,7 +1148,7 @@ def main():
             'uv':          load_font(AR_BLK, 36),  # UV value
             'small':       load_font(AR_R, 20),    # timestamps, bar subs
             'small_knock': load_font(AR_M, 20),    # small on black (bumped)
-            'tiny':        load_font('Tiny5-Regular.ttf', 10),  # compact vertical label
+            'tiny':        load_font('Tiny5-Regular.ttf', 20),  # compact vertical label
         }
 
         refresh_counter = 0

@@ -49,7 +49,7 @@ def fonts_B():
         'uv':         F('IBMPlexSans-Bold.ttf', 36),        # UV value
         'small':      F('IBMPlexSans-Regular.ttf', 20),     # timestamps, bar subs
         'small_knock': F('IBMPlexSans-Medium.ttf', 20),     # small on black (bumped)
-        'tiny':       F('Tiny5-Regular.ttf', 10),
+        'tiny':       F('Tiny5-Regular.ttf', 20),
         'tracking':   2,
     }
 
@@ -76,7 +76,7 @@ def fonts_C():
         'uv':         F('ArchivoBlack-Regular.ttf', 36),
         'small':      F('Archivo-Regular.ttf', 20),
         'small_knock': F('Archivo-Medium.ttf', 20),
-        'tiny':       F('Tiny5-Regular.ttf', 10),
+        'tiny':       F('Tiny5-Regular.ttf', 20),
         'tracking':   2,
     }
 
@@ -280,27 +280,29 @@ def render(fs):
                              fill='red' if pct >= 80 else 'black')
 
     # --- COL3: 3 messages + compact claude ---
-    COMPACT_H = 60
+    COMPACT_H = 90
     c3_top = BAND_H + 10
-    # compact claude strip — vertical Tiny5 label + 2 aligned inline bars
+    # compact claude: stacked letters + 2 aligned inline bars
     d.line((c3x + 8, c3_top - 4, c3x + c3w, c3_top - 4), fill='black', width=1)
     vfont = fs['tiny']
-    lbl = 'CLAUDE AI'
-    bbox = vfont.getbbox(lbl)
-    lw_v, lh_v = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    lbl_img = Image.new('RGB', (lw_v + 4, lh_v + 4), 'white')
-    ImageDraw.Draw(lbl_img).text((2, 2), lbl, font=vfont, fill='black')
-    lbl_img = lbl_img.rotate(90, expand=True)
-    img.paste(lbl_img, (c3x + 4, c3_top + (COMPACT_H - lbl_img.height) // 2))
-    bx = c3x + lbl_img.width + 12
-    bw = c3w - lbl_img.width - 20
+    letters = 'CLAUDE'
+    sample_bb = vfont.getbbox('M')
+    cell_h = sample_bb[3] - sample_bb[1] + 1
+    max_lw = max(vfont.getbbox(c)[2] - vfont.getbbox(c)[0] for c in letters)
+    total_h = len(letters) * cell_h
+    ly = c3_top + (COMPACT_H - total_h) // 2
+    for i, ch in enumerate(letters):
+        cw = vfont.getbbox(ch)[2] - vfont.getbbox(ch)[0]
+        d.text((c3x + 4 + (max_lw - cw) // 2, ly + i * cell_h), ch, font=vfont, fill='black')
+    bx = c3x + max_lw + 12
+    bw = c3w - max_lw - 20
     lbl_5h, lbl_7d = '5h · 42%', '7d · 81%'
     fixed_lw = max(int(fs['small'].getlength(lbl_5h)), int(fs['small'].getlength(lbl_7d)))
     usage_bar_inline(bx, c3_top + 8, bw, 42, lbl_5h, 'reset in 1 hr', label_col_w=fixed_lw)
-    usage_bar_inline(bx, c3_top + 34, bw, 81, lbl_7d, 'reset in 3 days', label_col_w=fixed_lw)
+    usage_bar_inline(bx, c3_top + 38, bw, 81, lbl_7d, 'reset in 3 days', label_col_w=fixed_lw)
     c3_top += COMPACT_H + 6
 
-    SLOT_H, SLOT_GAP = 113, 5
+    SLOT_H, SLOT_GAP = 103, 5
     msgs = [
         ('PRINTER', '3m ago', YELLOW, 'red', 'Black ink low (12%)'),
         ('DINNER', '12m ago', 'white', '', 'Ready in the kitchen'),

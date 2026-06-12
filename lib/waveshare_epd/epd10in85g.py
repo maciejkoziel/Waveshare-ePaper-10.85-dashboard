@@ -241,6 +241,18 @@ class EPD():
         self.CS_ALL(0)
         self.SendCommand(0x04)  # POWER_ON
         self.ReadBusyH()
+        # Select OTP fast-refresh waveform (~12s vs ~16.6s full). Vendor-baked,
+        # not a custom LUT — Good Display GDEY1085F51 EPD_init_Fast (2025-10-28):
+        # set after power-on, re-armed each cycle so it survives PowerOff.
+        # Trade-off: more ghosting than full waveform — the 600-cycle Init+Clear
+        # deep clean (main loop) absorbs it. Needs ~25C; indoor panel is fine.
+        self.SendCommand(0xE0)
+        self.SendData(0x03)
+        self.SendCommand(0xE6)
+        self.SendData(0x5C)   # 92 — fast-mode timing parameter
+        self.SendCommand(0xA5)
+        self.SendData(0x00)
+        self.ReadBusyH()
         self.CS_ALL(1)
 
     def sleep(self):

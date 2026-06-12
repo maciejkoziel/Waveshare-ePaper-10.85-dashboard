@@ -778,12 +778,13 @@ def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):
                    STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d))
 
 
-def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub):
-    lw = int(fonts['small'].getlength(label))
+def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub, label_col_w=None):
+    if label_col_w is None:
+        label_col_w = int(fonts['small'].getlength(label))
     sw = int(fonts['small'].getlength(sub))
     draw.text((x, y), label, font=fonts['small'], fill='black')
     draw.text((x + w - sw, y), sub, font=fonts['small'], fill='black')
-    bar_x = x + lw + 8
+    bar_x = x + label_col_w + 8
     bar_end = x + w - sw - 8
     bar_w = max(0, bar_end - bar_x)
     if bar_w > 0:
@@ -795,6 +796,8 @@ def draw_usage_bar_inline(draw, fonts, x, y, w, pct, label, sub):
                            fill='red' if pct >= 80 else 'black')
 
 
+COMPACT_H = 60
+
 def draw_claude_compact(draw, image, fonts, x, w, top, claude):
     draw.line((x + 8, top - 4, x + w, top - 4), fill='black', width=1)
     label = STRINGS.get('claude_card', 'CLAUDE AI')
@@ -804,23 +807,26 @@ def draw_claude_compact(draw, image, fonts, x, w, top, claude):
     lbl_img = Image.new('RGB', (lw + 4, lh + 4), 'white')
     ImageDraw.Draw(lbl_img).text((2, 2), label, font=vfont, fill='black')
     lbl_img = lbl_img.rotate(90, expand=True)
-    image.paste(lbl_img, (x + 4, top + (88 - lbl_img.height) // 2))
+    image.paste(lbl_img, (x + 4, top + (COMPACT_H - lbl_img.height) // 2))
     bx = x + lbl_img.width + 12
     bw = w - lbl_img.width - 20
     if claude.get('error'):
-        draw.text((bx, top + 30), STRINGS.get('claude_error', 'Usage Error'),
+        draw.text((bx, top + 20), STRINGS.get('claude_error', 'Usage Error'),
                   font=fonts['small'], fill='black')
         return
     pct_5h = claude.get('five_hour', {}).get('utilization', 0)
     pct_7d = claude.get('seven_day', {}).get('utilization', 0)
     rem_5h = time_until(claude.get('five_hour', {}).get('resets_at'))
     rem_7d = time_until(claude.get('seven_day', {}).get('resets_at'))
-    draw_usage_bar_inline(draw, fonts, bx, top + 16, bw, pct_5h,
-                          STRINGS.get('claude_5h_short', '5h · {pct}%').format(pct=pct_5h),
-                          STRINGS.get('claude_reset', 'reset {time}').format(time=rem_5h))
-    draw_usage_bar_inline(draw, fonts, bx, top + 52, bw, pct_7d,
-                          STRINGS.get('claude_7d_short', '7d · {pct}%').format(pct=pct_7d),
-                          STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d))
+    lbl_5h = STRINGS.get('claude_5h_short', '5h · {pct}%').format(pct=pct_5h)
+    lbl_7d = STRINGS.get('claude_7d_short', '7d · {pct}%').format(pct=pct_7d)
+    fixed_lw = max(int(fonts['small'].getlength(lbl_5h)), int(fonts['small'].getlength(lbl_7d)))
+    draw_usage_bar_inline(draw, fonts, bx, top + 8, bw, pct_5h, lbl_5h,
+                          STRINGS.get('claude_reset', 'reset {time}').format(time=rem_5h),
+                          label_col_w=fixed_lw)
+    draw_usage_bar_inline(draw, fonts, bx, top + 34, bw, pct_7d, lbl_7d,
+                          STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d),
+                          label_col_w=fixed_lw)
 
 
 def draw_message_slot(draw, fonts, x, w, top, h, msg, max_body_lines=2):
@@ -1064,10 +1070,9 @@ def render_screen(epd, fonts):
 
     if ENABLE_CLAUDE and len(messages) == 3:
         # compact claude strip (2 bars, no title) above 3 shrunk message slots
-        COMPACT_H = 88
         draw_claude_compact(draw, Himage, fonts, c3x, c3w, c3_top, claude)
         c3_top += COMPACT_H + 6
-        SLOT_H, SLOT_GAP = 104, 5
+        SLOT_H, SLOT_GAP = 113, 5
         for i, msg in enumerate(messages):
             top = c3_top + i * (SLOT_H + SLOT_GAP)
             draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, msg, max_body_lines=1)
@@ -1141,7 +1146,7 @@ def main():
             'uv':          load_font(AR_BLK, 36),  # UV value
             'small':       load_font(AR_R, 20),    # timestamps, bar subs
             'small_knock': load_font(AR_M, 20),    # small on black (bumped)
-            'tiny':        load_font(AR_NB, 14),   # compact vertical label
+            'tiny':        load_font('Tiny5-Regular.ttf', 10),  # compact vertical label
         }
 
         refresh_counter = 0

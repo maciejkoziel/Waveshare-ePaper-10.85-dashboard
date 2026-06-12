@@ -49,7 +49,7 @@ def fonts_B():
         'uv':         F('IBMPlexSans-Bold.ttf', 36),        # UV value
         'small':      F('IBMPlexSans-Regular.ttf', 20),     # timestamps, bar subs
         'small_knock': F('IBMPlexSans-Medium.ttf', 20),     # small on black (bumped)
-        'tiny':       F('IBMPlexSans-Regular.ttf', 14),
+        'tiny':       F('Tiny5-Regular.ttf', 10),
         'tracking':   2,
     }
 
@@ -76,7 +76,7 @@ def fonts_C():
         'uv':         F('ArchivoBlack-Regular.ttf', 36),
         'small':      F('Archivo-Regular.ttf', 20),
         'small_knock': F('Archivo-Medium.ttf', 20),
-        'tiny':       F('ArchivoNarrow-Bold.ttf', 14),
+        'tiny':       F('Tiny5-Regular.ttf', 10),
         'tracking':   2,
     }
 
@@ -263,8 +263,8 @@ def render(fs):
         d.text((DAY_X, y + 1), task, font=fs['body22'], fill='black')
         y += row_h
 
-    def usage_bar_inline(x, y, w, pct, label, sub):
-        lw = int(fs['small'].getlength(label))
+    def usage_bar_inline(x, y, w, pct, label, sub, label_col_w=None):
+        lw = label_col_w if label_col_w is not None else int(fs['small'].getlength(label))
         sw = int(fs['small'].getlength(sub))
         d.text((x, y), label, font=fs['small'], fill='black')
         d.text((x + w - sw, y), sub, font=fs['small'], fill='black')
@@ -280,9 +280,9 @@ def render(fs):
                              fill='red' if pct >= 80 else 'black')
 
     # --- COL3: 3 messages + compact claude ---
+    COMPACT_H = 60
     c3_top = BAND_H + 10
-    COMPACT_H = 88
-    # compact claude strip — vertical label + 2 inline bars
+    # compact claude strip — vertical Tiny5 label + 2 aligned inline bars
     d.line((c3x + 8, c3_top - 4, c3x + c3w, c3_top - 4), fill='black', width=1)
     vfont = fs['tiny']
     lbl = 'CLAUDE AI'
@@ -294,11 +294,13 @@ def render(fs):
     img.paste(lbl_img, (c3x + 4, c3_top + (COMPACT_H - lbl_img.height) // 2))
     bx = c3x + lbl_img.width + 12
     bw = c3w - lbl_img.width - 20
-    usage_bar_inline(bx, c3_top + 16, bw, 42, '5h · 42%', 'reset in 1 hr')
-    usage_bar_inline(bx, c3_top + 52, bw, 81, '7d · 81%', 'reset in 3 days')
+    lbl_5h, lbl_7d = '5h · 42%', '7d · 81%'
+    fixed_lw = max(int(fs['small'].getlength(lbl_5h)), int(fs['small'].getlength(lbl_7d)))
+    usage_bar_inline(bx, c3_top + 8, bw, 42, lbl_5h, 'reset in 1 hr', label_col_w=fixed_lw)
+    usage_bar_inline(bx, c3_top + 34, bw, 81, lbl_7d, 'reset in 3 days', label_col_w=fixed_lw)
     c3_top += COMPACT_H + 6
 
-    SLOT_H, SLOT_GAP = 104, 5
+    SLOT_H, SLOT_GAP = 113, 5
     msgs = [
         ('PRINTER', '3m ago', YELLOW, 'red', 'Black ink low (12%)'),
         ('DINNER', '12m ago', 'white', '', 'Ready in the kitchen'),

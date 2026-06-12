@@ -778,7 +778,25 @@ def draw_claude_card(draw, fonts, x, w, top, h, claude, separator):
                    STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d))
 
 
-def draw_message_slot(draw, fonts, x, w, top, h, msg):
+def draw_claude_compact(draw, fonts, x, w, top, claude):
+    draw.line((x + 8, top - 4, x + w, top - 4), fill='black', width=1)
+    if claude.get('error'):
+        draw.text((x + 16, top + 6), STRINGS.get('claude_error', 'Claude Usage Error'),
+                  font=fonts['small'], fill='black')
+        return
+    pct_5h = claude.get('five_hour', {}).get('utilization', 0)
+    pct_7d = claude.get('seven_day', {}).get('utilization', 0)
+    rem_5h = time_until(claude.get('five_hour', {}).get('resets_at'))
+    rem_7d = time_until(claude.get('seven_day', {}).get('resets_at'))
+    draw_usage_bar(draw, fonts, x + 16, top + 6, w - 32, pct_5h,
+                   STRINGS.get('claude_5h_short', '5h · {pct}%').format(pct=pct_5h),
+                   STRINGS.get('claude_reset', 'reset {time}').format(time=rem_5h))
+    draw_usage_bar(draw, fonts, x + 16, top + 50, w - 32, pct_7d,
+                   STRINGS.get('claude_7d_short', '7d · {pct}%').format(pct=pct_7d),
+                   STRINGS.get('claude_reset', 'reset {time}').format(time=rem_7d))
+
+
+def draw_message_slot(draw, fonts, x, w, top, h, msg, max_body_lines=2):
     bg = msg.get('bg_color', 'white')
     tc = msg.get('text_color', 'black')
     bc = msg.get('border_color', '')
@@ -798,7 +816,7 @@ def draw_message_slot(draw, fonts, x, w, top, h, msg):
         y = top + 54
     body = msg.get('body', '').strip()
     if body:
-        for line in wrap_text(body, fonts['body22'], w - 32)[:2]:
+        for line in wrap_text(body, fonts['body22'], w - 32)[:max_body_lines]:
             draw.text((x + 16, y), line, font=fonts['body22'], fill=tc)
             y += 28
 
@@ -1014,19 +1032,31 @@ def render_screen(epd, fonts):
 
     # --- COLUMN 3 (messages preempt fallback cards top-down) ---
     draw.line((c3x - 12, BAND_H + 10, c3x - 12, 470), fill='black', width=1)
-    SLOT_H, SLOT_GAP = 130, 6
     messages = read_messages()[:3]
-    cards = []
-    if ENABLE_CLAUDE:
-        cards.append(('claude', claude))
-    cards = cards[:max(0, 3 - len(messages))]
-    slots = cards + [('msg', m) for m in messages]
-    for i, (kind, payload) in enumerate(slots[:3]):
-        top = BAND_H + 10 + i * (SLOT_H + SLOT_GAP)
-        if kind == 'claude':
-            draw_claude_card(draw, fonts, c3x, c3w, top, SLOT_H, payload, separator=(i > 0))
-        else:
-            draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, payload)
+    c3_top = BAND_H + 10
+
+    if ENABLE_CLAUDE and len(messages) == 3:
+        # compact claude strip (2 bars, no title) above 3 shrunk message slots
+        COMPACT_H = 88
+        draw_claude_compact(draw, fonts, c3x, c3w, c3_top, claude)
+        c3_top += COMPACT_H + 6
+        SLOT_H, SLOT_GAP = 104, 5
+        for i, msg in enumerate(messages):
+            top = c3_top + i * (SLOT_H + SLOT_GAP)
+            draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, msg, max_body_lines=1)
+    else:
+        SLOT_H, SLOT_GAP = 130, 6
+        cards = []
+        if ENABLE_CLAUDE:
+            cards.append(('claude', claude))
+        cards = cards[:max(0, 3 - len(messages))]
+        slots = cards + [('msg', m) for m in messages]
+        for i, (kind, payload) in enumerate(slots[:3]):
+            top = c3_top + i * (SLOT_H + SLOT_GAP)
+            if kind == 'claude':
+                draw_claude_card(draw, fonts, c3x, c3w, top, SLOT_H, payload, separator=(i > 0))
+            else:
+                draw_message_slot(draw, fonts, c3x, c3w, top, SLOT_H, payload)
 
     return Himage
 

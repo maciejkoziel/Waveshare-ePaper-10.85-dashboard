@@ -261,10 +261,6 @@ def render(fs):
         d.text((DAY_X, y + 1), task, font=fs['body22'], fill='black')
         y += row_h
 
-    # --- COL3 slot 0: CLAUDE AI card ---
-    top = BAND_H + 10
-    draw_tracked(d, (c3x + 16, top + 4), 'CLAUDE AI', fs['label'], 'black', trk)
-
     def usage_bar(x, yb, w, pct, label, sub):
         d.text((x, yb), label, font=fs['small'], fill='black')
         d.text((x + w - fs['small'].getlength(sub), yb), sub, font=fs['small'], fill='black')
@@ -275,20 +271,31 @@ def render(fs):
             d.rectangle((x + 2, bar_y + 2, x + 2 + fill_w, bar_y + 9),
                         fill='red' if pct >= 80 else 'black')
 
-    usage_bar(c3x + 16, top + 34, c3w - 32, 42, '5h · 42%', 'reset in 1 hr')
-    usage_bar(c3x + 16, top + 82, c3w - 32, 81, '7d · 81%', 'reset in 3 days')
+    # --- COL3: 3 messages + compact claude ---
+    c3_top = BAND_H + 10
+    COMPACT_H = 88
+    # compact claude strip
+    d.line((c3x + 8, c3_top - 4, c3x + c3w, c3_top - 4), fill='black', width=1)
+    usage_bar(c3x + 16, c3_top + 6, c3w - 32, 42, '5h · 42%', 'reset in 1 hr')
+    usage_bar(c3x + 16, c3_top + 50, c3w - 32, 81, '7d · 81%', 'reset in 3 days')
+    c3_top += COMPACT_H + 6
 
-    # --- COL3 slot 1: message ---
-    SLOT_H, SLOT_GAP = 130, 6
-    top = BAND_H + 10 + (SLOT_H + SLOT_GAP)
-    d.rectangle((c3x, top, c3x + c3w, top + SLOT_H), fill=YELLOW)
-    d.rectangle((c3x, top, c3x + c3w, top + SLOT_H), outline='red', width=4)
-    d.text((c3x + 16, top + 10), 'PRINTER', font=fs['strong'], fill='black')
-    ago = '3m ago'
-    d.text((c3x + c3w - 16 - fs['small'].getlength(ago), top + 14),
-           ago, font=fs['small'], fill='black')
-    d.line((c3x + 16, top + 44, c3x + c3w - 16, top + 44), fill='black', width=1)
-    d.text((c3x + 16, top + 54), 'Black ink low (12%)', font=fs['body22'], fill='black')
+    SLOT_H, SLOT_GAP = 104, 5
+    msgs = [
+        ('PRINTER', '3m ago', YELLOW, 'red', 'Black ink low (12%)'),
+        ('DINNER', '12m ago', 'white', '', 'Ready in the kitchen'),
+        ('ALERT', '1h ago', 'white', 'black', 'Package delivered'),
+    ]
+    for i, (hdr, ago, bg, border, body) in enumerate(msgs):
+        top = c3_top + i * (SLOT_H + SLOT_GAP)
+        d.rectangle((c3x, top, c3x + c3w, top + SLOT_H), fill=bg)
+        if border:
+            d.rectangle((c3x, top, c3x + c3w, top + SLOT_H), outline=border, width=4)
+        tc = 'black'
+        d.text((c3x + 16, top + 10), hdr, font=fs['strong'], fill=tc)
+        d.text((c3x + c3w - 16 - fs['small'].getlength(ago), top + 14), ago, font=fs['small'], fill=tc)
+        d.line((c3x + 16, top + 44, c3x + c3w - 16, top + 44), fill=tc, width=1)
+        d.text((c3x + 16, top + 54), body, font=fs['body22'], fill=tc)
 
     # --- FORECAST STRIP ---
     sy = 390

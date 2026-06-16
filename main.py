@@ -292,7 +292,7 @@ def auth_google():
             if creds.valid:
                 return
             if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                creds.refresh(Request(timeout=10))
                 with open(GMAIL_TOKEN_PATH, 'w') as f: f.write(creds.to_json())
                 return
         except Exception:
@@ -348,7 +348,7 @@ def update_data_thread():
                 if os.path.exists(GMAIL_TOKEN_PATH):
                     creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GOOGLE_SCOPES)
                     if creds and creds.expired and creds.refresh_token:
-                        creds.refresh(Request())
+                        creds.refresh(Request(timeout=10))
                         with open(GMAIL_TOKEN_PATH, 'w') as t: t.write(creds.to_json())
                 if creds and creds.valid:
                     cal_service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
@@ -408,7 +408,7 @@ def update_data_thread():
                 if os.path.exists(GMAIL_TOKEN_PATH):
                     creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_PATH, GOOGLE_SCOPES)
                     if creds and creds.expired and creds.refresh_token:
-                        creds.refresh(Request())
+                        creds.refresh(Request(timeout=10))
                         with open(GMAIL_TOKEN_PATH, 'w') as t: t.write(creds.to_json())
                 if creds and creds.valid:
                     tasks_service = build('tasks', 'v1', credentials=creds, cache_discovery=False)

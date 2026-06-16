@@ -496,7 +496,7 @@ def get_weather_icon(code, is_day=1):
     elif code in [71, 73, 75, 85, 86]:
         return "icon_snow"
     elif code in [95, 96, 99]:
-        return "icon_lightning"
+        return "icon_cloud-lightning"
     return "icon_sun"
 
 

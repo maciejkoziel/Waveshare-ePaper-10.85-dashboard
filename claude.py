@@ -27,6 +27,7 @@ REDIRECT_URI = "http://localhost:18924/callback"
 SCOPES = "user:inference user:profile"
 REFRESH_BUFFER_SEC = 600
 USER_AGENT = "claude-code/2.0.32"
+MESSAGE_SERVER_URL = "http://localhost:5000"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -151,6 +152,31 @@ def interactive_auth() -> bool:
         return False
 
 
+def post_reauth_alert():
+    try:
+        requests.post(
+            f"{MESSAGE_SERVER_URL}/message",
+            json={
+                "header": "CLAUDE RE-AUTH",
+                "body": "Token invalid. SSH to Pi: python3 claude.py",
+                "text_color": "black",
+                "bg_color": "yellow",
+                "border_color": "red",
+                "ttl": 0,
+            },
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+
+def clear_reauth_alert():
+    try:
+        requests.delete(f"{MESSAGE_SERVER_URL}/message", timeout=5)
+    except Exception:
+        pass
+
+
 def refresh_access_token(creds: dict) -> dict | None:
     refresh_token = creds.get("refreshToken") or creds.get("refresh_token")
     if not refresh_token:
@@ -166,6 +192,11 @@ def refresh_access_token(creds: dict) -> dict | None:
         resp = requests.post(TOKEN_URL, json=payload, timeout=15)
         if resp.status_code != 200:
             log.error(f"Token refresh failed: {resp.status_code} {resp.text}")
+            try:
+                if resp.json().get("error") == "invalid_grant":
+                    post_reauth_alert()
+            except Exception:
+                pass
             return None
         data = resp.json()
         creds["accessToken"] = data.get("access_token")
@@ -241,6 +272,7 @@ def main():
 
     if raw:
         save_usage(raw)
+        clear_reauth_alert()
     else:
         USAGE_FILE.write_text(json.dumps({"error": "fetch_failed"}, indent=2))
 

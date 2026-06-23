@@ -181,6 +181,7 @@ def refresh_access_token(creds: dict) -> dict | None:
     refresh_token = creds.get("refreshToken") or creds.get("refresh_token")
     if not refresh_token:
         log.error("No refresh token found in credentials.")
+        post_reauth_alert()
         return None
 
     payload = {

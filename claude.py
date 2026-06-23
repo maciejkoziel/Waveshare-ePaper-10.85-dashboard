@@ -158,7 +158,7 @@ def post_reauth_alert():
             f"{MESSAGE_SERVER_URL}/message",
             json={
                 "header": "CLAUDE RE-AUTH",
-                "body": "Token invalid. SSH to Pi: python3 claude.py",
+                "body": "Token invalid. Run reauth-pi.sh on Mac.",
                 "text_color": "black",
                 "bg_color": "yellow",
                 "border_color": "red",
